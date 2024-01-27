@@ -1,6 +1,8 @@
 {-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications, TypeFamilyDependencies #-}
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
+{-# OPTIONS -fplugin RoHsPlugin #-}
+
 module Surface where
 
 import Data.Proxy
@@ -16,7 +18,7 @@ class (~<~) (a :: Row t) (b :: Row t)
   -- probably shouldn't have user instances of this class... :P
 
 -- This is what I really want:
-type family (~+~) (a :: Row t) (b :: Row t) = (c :: Row t) 
+type family (~+~) (a :: Row t) (b :: Row t) = (c :: Row t)
     -- | c a -> b, c b -> a
     where
 
@@ -120,15 +122,15 @@ case1 f = f . unlabV1
 
 --
 
-bar :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["true" := Int, "false" := Bool]) => 
+bar :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["true" := Int, "false" := Bool]) =>
        -- This constraint should be solvable
-       Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["true" := Int, "false" := Bool]) => 
+       Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["true" := Int, "false" := Bool]) =>
        V0 (R '["true" := Int, "false" := Bool]) -> Int
 bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
-bar1 :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["false" := Bool, "true" := Int]) => 
+bar1 :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["false" := Bool, "true" := Int]) =>
        -- This constraint should be solvable
-       Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["false" := Bool, "true" := Int]) => 
+       Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["false" := Bool, "true" := Int]) =>
        V0 (R '["false" := Bool, "true" := Int]) -> Int
 bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
@@ -136,21 +138,21 @@ bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 -- concerned about the type argument to inj0.
 -- bar2 :: forall z y.
 --         -- Bit of a run-around here because GHC doesn't like `z ~<~ x ~+~ y` constraints
---         (R '["x" := Bool] ~+~ z ~ y, 
+--         (R '["x" := Bool] ~+~ z ~ y,
 --          -- These three constraint should all be solvable, *given the definition above*
---          R '["x" := Bool] ~<~ R '["x" := Bool],  
+--          R '["x" := Bool] ~<~ R '["x" := Bool],
 --          R '["x" := Bool] ~<~ y,
 --          z ~<~ y) =>
 --         V0 (R '["x" := Int] ~+~ z) -> V0 y
--- bar2 = case0 @"x" (\(i :: Int) -> con0 @"x" (i == 0)) `brn0` 
+-- bar2 = case0 @"x" (\(i :: Int) -> con0 @"x" (i == 0)) `brn0`
 --        inj0 @z
 
 bar2 :: forall z y1 y2.
         -- Bit of a run-around here because GHC doesn't like `z ~<~ x ~+~ y` constraints
         (Plus (R '["x" := Integer]) z y1,    -- `Integer` so defaulting doesn't get in the way
-         Plus (R '["x" := Bool]) z y2, 
+         Plus (R '["x" := Bool]) z y2,
          -- These three constraint should all be solvable, *given the definitions above*
-         R '["x" := Bool] ~<~ R '["x" := Bool],  
+         R '["x" := Bool] ~<~ R '["x" := Bool],
          R '["x" := Bool] ~<~ y2,
          z ~<~ y2) =>
         V0 y1 -> V0 y2
@@ -170,37 +172,37 @@ type family Each :: (a -> b) -> Row a -> Row b where
 type family All :: (a -> Constraint) -> Row a -> Constraint where
 
 ana0 :: forall z t.
-        (forall s y {u}. (Plus (R '[s := u]) y z, 
-                          R '[s := u] ~<~ z, 
-                          y ~<~ z) => 
-                          u -> t) -> 
+        (forall s y {u}. (Plus (R '[s := u]) y z,
+                          R '[s := u] ~<~ z,
+                          y ~<~ z) =>
+                          u -> t) ->
         V0 z -> t
 ana0 _ = undefined
 
-anaE0 :: forall phi {z} {t}. 
-         (forall s y {u}. (Plus (R '[s := u]) y z, 
-                           R '[s := u] ~<~ z, 
-                           y ~<~ z) => 
-                           phi u -> t) -> 
+anaE0 :: forall phi {z} {t}.
+         (forall s y {u}. (Plus (R '[s := u]) y z,
+                           R '[s := u] ~<~ z,
+                           y ~<~ z) =>
+                           phi u -> t) ->
          V0 (Each phi z) -> t
 anaE0 _ = undefined
 
 anaA0 :: forall c {z} {t}.
          All c z =>
-         (forall s y {u}. (Plus (R '[s := u]) y z, 
-                           R '[s := u] ~<~ z, 
+         (forall s y {u}. (Plus (R '[s := u]) y z,
+                           R '[s := u] ~<~ z,
                            y ~<~ z,
-                           c u) => 
-                           u -> t) -> 
+                           c u) =>
+                           u -> t) ->
          V0 z -> t
 anaA0 _ = undefined
 
 anaA1 :: forall c {z} {t} {u}.
          All c z =>
-         (forall s y {f}. (Plus (R '[s := f]) y z, 
-                           R '[s := f] ~<~ z, 
+         (forall s y {f}. (Plus (R '[s := f]) y z,
+                           R '[s := f] ~<~ z,
                            y ~<~ z,
-                           c f) => 
+                           c f) =>
                            Proxy s -> f u -> t) ->   -- Proxy!? see `fmapV` below
          V1 z u -> t
 anaA1 _ = undefined
@@ -217,14 +219,14 @@ boo1 = anaA0 @Show f where
 -- But apparently adding the type signature will make `f` no longer have the
 -- right type.  I am concerned that I am missing something fundamental here...
 
---   f :: forall s y u. (Plus (R '[s := u]) y z, 
---                       R '[s := u] ~<~ z, 
+--   f :: forall s y u. (Plus (R '[s := u]) y z,
+--                       R '[s := u] ~<~ z,
 --                       y ~<~ z,
---                       Show u) => 
+--                       Show u) =>
 --                       u -> String
 --   f = show
 
--- constants :: forall t z. 
+-- constants :: forall t z.
 --              (forall s f u z. R '[s := u] ~<~ z => R '[s := f u] ~<~ Each f z) =>
 --              V0 z -> V0 (Each ((->) t) z)
 -- constants = ana0 f where
@@ -238,10 +240,10 @@ fmapV f = anaA1 @Functor g where
 
   -- Can't get away without the type annotation here... even if I try to pattern
   -- match on the proxy.  Let's pretend I understand anything.
-  g :: forall s y f. (Plus (R '[s := f]) y z, 
-                      R '[s := f] ~<~ z, 
+  g :: forall s y f. (Plus (R '[s := f]) y z,
+                      R '[s := f] ~<~ z,
                       y ~<~ z,
-                      Functor f) => 
+                      Functor f) =>
                      Proxy s -> f a -> V1 z b
   g _ x = con1 @s (fmap f x)
 
@@ -249,7 +251,7 @@ fmapV f = anaA1 @Functor g where
 
 data ZeroF k a = C0 k
   deriving Functor
-data OneF a    = C1 a 
+data OneF a    = C1 a
   deriving Functor
 data TwoF a    = C2 a a
   deriving Functor
@@ -271,10 +273,10 @@ desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
 
 -- Of course, I don't want to fix the entire row.
-desugar' :: forall bigr smallr. 
+desugar' :: forall bigr smallr.
            (-- These are essentially part of the type
             Plus (R '["Double" := OneF]) smallr bigr,
-            All Functor smallr,            
+            All Functor smallr,
             R '["Add" := TwoF] ~<~ smallr,
             -- This should be solvable
             smallr ~<~ smallr) =>
