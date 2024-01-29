@@ -1,39 +1,19 @@
-{-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications, TypeFamilyDependencies #-}
+{-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications #-}
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
+{-# LANGUAGE TypeFamilyDependencies #-}
 {-# OPTIONS -fplugin RoHsPlugin #-}
 
 module Surface where
 
-import Data.Proxy
+import Common
+
 import GHC.Base
-
-data Row :: Type -> Type where
-  R :: [Assoc a] -> Row a
-
-data Assoc :: Type -> Type where
-  (:=) :: Symbol -> a -> Assoc a
-
-class (~<~) (a :: Row t) (b :: Row t)
-  -- probably shouldn't have user instances of this class... :P
-
--- This is what I really want:
-type family (~+~) (a :: Row t) (b :: Row t) = (c :: Row t)
-    -- | c a -> b, c b -> a
-    where
-
--- But that's more than just an injective type family.  We can make more
--- progress using the following definition:
-
-class Plus (x :: Row t) (y :: Row t) (z :: Row t) | x y -> z, x z -> y, y z -> x
-
--- But if this is going to *actually* work, we're going to need to step in with
--- some defaulting to actually fix `z`s.
 
 -- Records ahoy
 
-data R0 :: Row Type -> Type
-data R1 :: Row (a -> Type) -> a -> Type
+data R0 :: Row Type -> Type -- how do the terms which inhabit this type look like
+data R1 :: Row (a -> Type) -> a -> Type -- term level re
 
 -- See if we can do anything
 
@@ -51,9 +31,9 @@ unlabR0 = undefined
 prj0 :: forall z y. z ~<~ y => R0 y -> R0 z
 prj0 = undefined
 
--- cat0 :: R0 y -> R0 z -> R0 (y ~+~ z)
-cat0 :: Plus y z x => R0 y -> R0 z -> R0 x
-cat0 r s = undefined
+cat0 :: R0 y -> R0 z -> R0 (y ~+~ z)
+-- cat0 :: Plus y z x => R0 y -> R0 z -> R0 x
+cat0 _ _ = undefined
 
 -- Sigh...
 
@@ -66,17 +46,15 @@ unlabR1 = undefined
 prj1 :: z ~<~ y => R1 y t -> R1 z t
 prj1 = undefined
 
--- cat1 :: R1 y t -> R1 z t -> R1 (y ~+~ z) t
-cat1 :: Plus y z x => R1 y t -> R1 z t -> R1 x t
-cat1 r s = undefined
+cat1 :: R1 y t -> R1 z t -> R1 (y ~+~ z) t
+-- cat1 :: Plus y z x => R1 y t -> R1 z t -> R1 x t
+cat1 _ _ = undefined
 
 sel0 :: forall s {t} {z}. R '[s := t] ~<~ z => R0 z -> t
 -- Perhaps we can use some of these at least...
-
 sel0 r = unlabR0 @s (prj0 r)
 
 -- Let's repeat the tedium for variants...
-
 data V0 :: Row Type -> Type
 data V1 :: Row (a -> Type) -> a -> Type
 
@@ -98,12 +76,12 @@ inj0 = undefined
 inj1 :: y ~<~ z => V1 y t -> V1 z t
 inj1 = undefined
 
--- brn0 :: (V0 x -> t) -> (V0 y -> t) -> V0 (x ~+~ y) -> t
-brn0 :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
+brn0 :: (V0 x -> t) -> (V0 y -> t) -> V0 (x ~+~ y) -> t
+-- brn0 :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
 brn0 = undefined
 
--- brn1 :: (V1 x t -> u) -> (V1 y t -> u) -> V1 (x ~+~ y) t -> u
-brn1 :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
+brn1 :: (V1 x t -> u) -> (V1 y t -> u) -> V1 (x ~+~ y) t -> u
+-- brn1 :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
 brn1 = undefined
 
 -- and we can define
@@ -124,13 +102,13 @@ case1 f = f . unlabV1
 
 bar :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["true" := Int, "false" := Bool]) =>
        -- This constraint should be solvable
-       Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["true" := Int, "false" := Bool]) =>
+       -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["true" := Int, "false" := Bool]) =>
        V0 (R '["true" := Int, "false" := Bool]) -> Int
 bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
-
+{-
 bar1 :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["false" := Bool, "true" := Int]) =>
        -- This constraint should be solvable
-       Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["false" := Bool, "true" := Int]) =>
+       -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["false" := Bool, "true" := Int]) =>
        V0 (R '["false" := Bool, "true" := Int]) -> Int
 bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
@@ -156,7 +134,7 @@ bar2 :: forall z y1 y2.
          R '["x" := Bool] ~<~ y2,
          z ~<~ y2) =>
         V0 y1 -> V0 y2
-bar2 = case0 @"x" (\i -> con0 @"x" (i == 0)) `brn0` inj0
+bar2 = case0 @"x" (\i -> con0 @"x" (i == (0 :: Integer))) `brn0` inj0
 
 -- Okay, let's try Rω again.  Same fundamental problem: we need to replace the use of type-level λs.
 
@@ -293,3 +271,4 @@ desugar' :: forall bigr smallr.
            Mu (V1 bigr) -> Mu (V1 smallr)
 desugar' (Wrap e) = Wrap ((double `brn1` (fmapV desugar' . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar' x) (desugar' x)))
+-}
