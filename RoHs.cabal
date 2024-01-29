@@ -51,16 +51,18 @@ extra-doc-files:    CHANGELOG.md
 -- Extra source files to be distributed with the package, such as examples, or a tutorial module.
 -- extra-source-files:
 
-common warnings
+common ghcopts
     ghc-options: -Wall
+    -- -ddump-tc-trace
 
 library
     -- Import common warning flags.
-    import:           warnings
+    import:           ghcopts
 
     -- Modules exported by the library.
     exposed-modules:  Surface
                       RoHsPlugin
+                      Common
                       Example
 
     -- Modules included in this library but not exported.
@@ -71,7 +73,8 @@ library
 
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.17.2.0,
-                      ghc ^>=9.4.7
+                      ghc ^>=9.4.7,
+                      ghc-tcplugin-api ^>= 0.11.0.0
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -81,7 +84,7 @@ library
 
 test-suite RoHs-test
     -- Import common warning flags.
-    import:           warnings
+    import:           ghcopts
 
     -- Base language which the package is written in.
     default-language: GHC2021
