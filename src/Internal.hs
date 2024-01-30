@@ -241,13 +241,25 @@ f1 = brn e3 (case0 (\(x :: Bool) -> 1)) (case0 (\(x :: Int) -> 2))
 f2 :: (Int, a) -> Int
 f2 = brn e3' (case0 (\(x :: Int) -> 2)) (case0 (\(x :: Bool) -> 1))
 
+y1_1, y1_2, y2_1, y2_2 :: Int
+y1_1 = f1 i1
+y1_2 = f2 i1
+y2_1 = f1 i2
+y2_2 = f2 i2
+
 i3 :: (Int, String)
 i3 = (3, "Hello, world")
 
 i4 :: (Int, Int)
 i4 = (0, 62)
 
-f3 :: (Int, a) -> Int
+f3 :: (Int, a) -> Int -- V0 (R '["x" := Int, "y" := Bool, "z" := Int, "w" := String]) -> Int
 f3 = brn e4 f1 (brn (2, ((1, 0), (0, 0)))
                     (case0 (\(x :: String) -> length x)) 
                     (case0 (\(x :: Int) -> x)))
+
+y3_0, y3_1, y3_2, y3_3 :: Int                    
+y3_0 = f3 i4
+y3_1 = f3 (inj e1 i1)
+y3_2 = f3 (inj e1 i2)
+y3_3 = f3 i3
