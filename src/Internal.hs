@@ -112,7 +112,6 @@ e3' = (2, ((1, 0), (0, 0)))
 e4 :: (Int, ((Int, Int), (Int, Int), (Int, Int), (Int, Int))) -- (R '["y" := Bool, "z" := Int]) ~+~ (R '["x" := Int, "w" := String]) ~ (R '["x" := Int, "y" := Bool, "z" := Int, "w" := String])
 e4 = (4, ((1, 0), (0, 0), (0, 1), (1, 1)))
 
-
 ---------------------------------------------------------------------------------
 -- Records
 --
@@ -127,9 +126,7 @@ e4 = (4, ((1, 0), (0, 0), (0, 1), (1, 1)))
 -- gets duplicated for each size of record.  I'm bored of that gimmick, so let's
 -- just start with approach 2.
 
-
 -- TODO: what about 0-ary records?  Ignoring for now, I suspect...
-
 
 prj :: (Int, a) -> ((Int, c), d) -> ((Int, e), d)
 prj d (e, r) = (compose d e, r)
@@ -151,8 +148,6 @@ cat (3, fs) r p = ((3, unsafeCoerce (0, 1, 2)), unsafeCoerce (get (unsafeNth 0 f
 cat (4, fs) r p = ((4, unsafeCoerce (0, 1, 2, 3)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p, get (unsafeNth 3 fs) r p)) where
   get (0, n) r _ = field n r
   get (1, n) _ p = field n p
-
-
 
 -- Umm right, let's see if anything does anything
 -- Also maybe we should be flattening the end of this structure...
@@ -209,9 +204,50 @@ r7 = cat e4 (cat e3 r3 r4) r6
 x7_0 :: Int; x7_1 :: Bool; x7_2 :: Int; x7_3 :: String
 (x7_0, x7_1, x7_2, x7_3) = (field 0 r7, field 1 r7, field 2 r7, field 3 r7)
 
-
 --------------------------------------------------------------------------------
 -- Variants
 --
--- 
+-- In some kind of naive world, we might imagine that just as records are
+-- implemented as tuples and `unsafeCoerce`, we could implement variants as
+-- n-ary `Either`s with `unsafeCoerce`.  However, this seem to make it difficult
+-- to implement both branching and coercion, as relabeling constructors would
+-- require rebuilding the underlying values.
+--
+-- Instead, let's implement variants as pairs `(Int, a)`, where the first `Int`
+-- identifies the constructor.
 
+inj :: (Int, a) -> (Int, b) -> (Int, b)
+inj (_, d) (k, v) = (unsafeNth k d, v)
+
+brn :: (Int, a) -> ((Int, b) -> c) -> ((Int, d) -> c) -> ((Int, f) -> c)
+brn (_, d) f g (k, v) = if n == 0 then f (j, unsafeCoerce v) else g (j, unsafeCoerce v) where 
+  (n, j) = unsafeNth k d
+
+ctor0 :: a -> (Int, a)  -- dual to field0
+ctor0 v = (0, v)
+
+case0 :: (a -> b) -> (Int, c) -> b
+case0 f (0, x) = f (unsafeCoerce x)
+
+i1 :: (Int, Bool)  -- V0 (R '["y" := Bool, "z" := Int])
+i1 = inj e2 (ctor0 False)
+
+i2 :: (Int, Int) -- V0 (R '["y" := Bool, "z" := Int])
+i2 = inj e2' (ctor0 14)
+
+f1 :: (Int, a) -> Int
+f1 = brn e3 (case0 (\(x :: Bool) -> 1)) (case0 (\(x :: Int) -> 2))
+
+f2 :: (Int, a) -> Int
+f2 = brn e3' (case0 (\(x :: Int) -> 2)) (case0 (\(x :: Bool) -> 1))
+
+i3 :: (Int, String)
+i3 = (3, "Hello, world")
+
+i4 :: (Int, Int)
+i4 = (0, 62)
+
+f3 :: (Int, a) -> Int
+f3 = brn e4 f1 (brn (2, ((1, 0), (0, 0)))
+                    (case0 (\(x :: String) -> length x)) 
+                    (case0 (\(x :: Int) -> x)))
