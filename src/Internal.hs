@@ -3,6 +3,8 @@ module Internal where
 import Data.Tuple
 import Unsafe.Coerce
 
+import Debug.Trace
+
 ---------------------------------------------------------------------------------
 -- Starting point: tuples are like arrays, let's trust our bounds checking
 
@@ -111,6 +113,18 @@ e3' = (2, ((1, 0), (0, 0)))
 
 e4 :: (Int, ((Int, Int), (Int, Int), (Int, Int), (Int, Int))) -- (R '["y" := Bool, "z" := Int]) ~+~ (R '["x" := Int, "w" := String]) ~ (R '["x" := Int, "y" := Bool, "z" := Int, "w" := String])
 e4 = (4, ((1, 0), (0, 0), (0, 1), (1, 1)))
+
+-- TODO: we are supposed to be able to "invert" evidence of `Plus`: if we know
+-- `Plus x y z`, we should also know `x ~<~ z` and `y ~<~ z`.  In `Surface.hs`,
+-- I work around this by assuming *both*, but users should not run into this.  A
+-- couple of options:
+--
+-- 1. In the Rω formal development, I just used a triple of the "real" evidence
+--    for Plus and the two containments as the evidence for Plus.
+--
+-- 2. We could actually have a function to invert evidence.
+--
+-- For now, I'm not making a choice.....
 
 ---------------------------------------------------------------------------------
 -- Records
@@ -263,3 +277,107 @@ y3_0 = f3 i4
 y3_1 = f3 (inj e1 i1)
 y3_2 = f3 (inj e1 i2)
 y3_3 = f3 i3
+
+----------------------------------------------------------------------------------
+-- Ana
+--
+-- Let's have a little think here.  Ideally, we'd be able to get away with
+-- something like:
+--
+--   ana f (k, x) = f x
+--
+-- Because `f` is generic over which actual case it applies to.  *However*, we
+-- need to pass `f` a couple of pieces of evidence:
+--
+--   1. Evidence that the case it's seeing is part of the whole (i.e., the `Plus
+--      (R '[s := t]) y z` evidence)
+--
+--   2 & 3. Also, `R '[s := t] ~<~ z` and `y ~<~ z` (although see note above,
+--   this should not be necessary)
+--
+--   4. Evidence of the `All` constraint.
+--
+-- Oh right, so we should figure out what the `All` constraint looks like.  I
+-- think the implementation here will have to approximate to a fair degree---GHC
+-- doesn't yet let me actually reify dictionaries or pass them to terms with
+-- qualified types, does it?
+--
+-- Crucially, however, the `All` constraint will let us sneak in the size of the
+-- original row!
+
+ana :: (Int, a)                                -- `All c z` dictionary (size, tuple of dictionaries)
+    -> ((Int, e1) -> (Int, e2) -> (Int, e3) -> e4 -> b -> c)   -- "Iterator": needs four pieces of evidence, as above; also needs proxy argument, but I'm leaving that out for now
+    -> (Int, d) -> c                           -- Actual variant to final result
+ana (n, allE) f (k, v) = f (plusE n k) (oneIn n k) (manyIn n k) (unsafeNth k allE) (unsafeCoerce v) 
+  
+
+pick :: Int -> Int -> (Int, Int)
+pick j k | j == k    = (0, 0)
+         | j < k     = (1, j)
+         | otherwise = (1, j - 1)
+
+plusE :: Int -> Int -> (Int, a)
+plusE 2 k = (2, unsafeCoerce (pick 0 k, pick 1 k))
+plusE 3 k = (3, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k))
+plusE 4 k = (4, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k, pick 3 k))
+plusE 5 k = (5, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k, pick 3 k, pick 4 k))
+plusE 6 k = (5, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k, pick 3 k, pick 4 k, pick 5 k))
+
+oneIn :: Int -> Int -> (Int, a)
+oneIn n k = (1, unsafeCoerce (MkSolo k))
+
+-- I am not excited about this code at all
+manyIn :: Int -> Int -> (Int, a)
+manyIn 2 0 = (1, unsafeCoerce (MkSolo 1))
+manyIn 2 1 = (1, unsafeCoerce (MkSolo 0))
+manyIn 3 0 = (2, unsafeCoerce (1, 2))
+manyIn 3 1 = (2, unsafeCoerce (0, 2))
+manyIn 3 2 = (2, unsafeCoerce (0, 1))
+manyIn 4 0 = (3, unsafeCoerce (1, 2, 3))
+manyIn 4 1 = (3, unsafeCoerce (0, 2, 3))
+manyIn 4 2 = (3, unsafeCoerce (0, 1, 3))
+manyIn 4 3 = (3, unsafeCoerce (0, 1, 2))
+manyIn 5 0 = (4, unsafeCoerce (1, 2, 3, 4))
+manyIn 5 1 = (4, unsafeCoerce (0, 2, 3, 4))
+manyIn 5 2 = (4, unsafeCoerce (0, 1, 3, 4))
+manyIn 5 3 = (4, unsafeCoerce (0, 1, 2, 4))
+manyIn 5 4 = (4, unsafeCoerce (0, 1, 2, 3))
+
+-- Let's see if it does anything
+
+-- showV :: forall z. All Show z => V0 z -> String
+-- showV = anaA0 @Show (const show)   
+
+showV :: (Int, a) -> (Int, b) -> String
+showV d k = ana d f k where
+  f _ _ _ d k = d k
+
+-- All Show (R '["x" := Int, "y" := Bool, "z" := Int, "w" := String])
+allShow :: (Int, (Int -> String, Bool -> String, Int -> String, String -> String))
+allShow = (4, (show, show, show, show))
+
+-- z1, z2 :: String
+z1 = showV allShow i3
+z2 = showV allShow (inj e1 i2)
+
+-- eqV :: forall z. All Eq z => V0 z -> V0 z -> Bool
+-- eqV v w = anaA0 @Eq g w where
+--   g :: forall s y t. (Plus (R '[s := t]) y z, 
+--                       R '[s := t] ~<~ z,
+--                       y ~<~ z,
+--                       Eq t) =>
+--                      Proxy s -> t -> Bool
+--   g _ x = (case0 @s (\y -> x == y) `brn0` const False) v
+
+eqV :: (Int, a) -> (Int, b) -> (Int, c) -> Bool
+eqV d v w = ana d g w where
+  g plusE _ _ eqE x = brn plusE (case0 (\y -> eqE x y))
+                                (\y -> False) v
+
+
+-- All Show (R '["x" := Int, "y" := Bool, "z" := Int, "w" := String])
+allEq :: (Int, (Int -> Int -> Bool, Bool -> Bool -> Bool, Int -> Int -> Bool, String -> String -> Bool))
+allEq = (4, ((==), (==), (==), (==)))
+
+z3 = eqV allEq i3 i3
+z4 = eqV allEq i3 (inj e1 i2)
