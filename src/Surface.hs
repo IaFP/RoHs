@@ -209,11 +209,11 @@ anaA1 _ = undefined
 
 --
 
-boo :: forall z. All Show z => V0 z -> String
-boo = anaA0 @Show (const show)
+showV :: forall z. All Show z => V0 z -> String
+showV = anaA0 @Show (const show)
 
-boo1 :: forall z. All Show z => V0 z -> String
-boo1 = anaA0 @Show f where
+showV1 :: forall z. All Show z => V0 z -> String
+showV1 = anaA0 @Show f where
   f _ x = show x
 
 -- But apparently adding the type signature will make `f` no longer have the
@@ -234,7 +234,6 @@ boo1 = anaA0 @Show f where
 
 eqV :: forall z. All Eq z => V0 z -> V0 z -> Bool
 eqV v w = anaA0 @Eq g w where
-
   g :: forall s y t. (Plus (R '[s := t]) y z, 
                       R '[s := t] ~<~ z,
                       y ~<~ z,
