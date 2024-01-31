@@ -193,7 +193,7 @@ anaA0 :: forall c {z} {t}.
                            R '[s := u] ~<~ z,
                            y ~<~ z,
                            c u) =>
-                           u -> t) ->
+                           Proxy s -> u -> t) ->  -- Assuming I'll need proxies for same reason as below
          V0 z -> t
 anaA0 _ = undefined
 
@@ -210,11 +210,11 @@ anaA1 _ = undefined
 --
 
 boo :: forall z. All Show z => V0 z -> String
-boo = anaA0 @Show show
+boo = anaA0 @Show (const show)
 
 boo1 :: forall z. All Show z => V0 z -> String
 boo1 = anaA0 @Show f where
-  f x = show x
+  f _ x = show x
 
 -- But apparently adding the type signature will make `f` no longer have the
 -- right type.  I am concerned that I am missing something fundamental here...
@@ -231,6 +231,17 @@ boo1 = anaA0 @Show f where
 --              V0 z -> V0 (Each ((->) t) z)
 -- constants = ana0 f where
 --   f x = con0 (\y -> x)
+
+eqV :: forall z. All Eq z => V0 z -> V0 z -> Bool
+eqV v w = anaA0 @Eq g w where
+
+  g :: forall s y t. (Plus (R '[s := t]) y z, 
+                      R '[s := t] ~<~ z,
+                      y ~<~ z,
+                      Eq t) =>
+                     Proxy s -> t -> Bool
+  g _ x = (case0 @s (\y -> x == y) `brn0` const False) v
+
 
 fmapV :: forall a b z. All Functor z => (a -> b) -> V1 z a -> V1 z b
 fmapV f = anaA1 @Functor g where
