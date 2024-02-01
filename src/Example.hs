@@ -23,3 +23,8 @@ bar2 :: forall z y1 y2.
         V0 y1 -> V0 y2
 bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
   where zero :: Integer = 0
+
+-- This example fails because
+-- Could not deduce ‘(R '["x" := Integer] ~+~ y0) ~ y1
+--       from the context: ((R '["x" := Bool] ~+~ z) ~ y2,
+--                          (R '["x" := Integer] ~+~ z) ~ y1)
