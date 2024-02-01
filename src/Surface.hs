@@ -10,10 +10,6 @@ import Common
 
 import GHC.Base
 
--- Records ahoy
-
-data R0 :: Row Type -> Type -- how do the terms which inhabit this type look like
-data R1 :: Row (a -> Type) -> a -> Type -- term level re
 
 -- See if we can do anything
 
@@ -53,10 +49,6 @@ cat1 _ _ = undefined
 sel0 :: forall s {t} {z}. R '[s := t] ~<~ z => R0 z -> t
 -- Perhaps we can use some of these at least...
 sel0 r = unlabR0 @s (prj0 r)
-
--- Let's repeat the tedium for variants...
-data V0 :: Row Type -> Type
-data V1 :: Row (a -> Type) -> a -> Type
 
 labV0 :: forall s {t}. t -> V0 (R '[s := t])
 labV0 = undefined
@@ -99,19 +91,19 @@ case1 :: forall s {f} {t} {u}. (f t -> u) -> V1 (R '[s := f]) t -> u
 case1 f = f . unlabV1
 
 --
-{-
+
 bar :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["true" := Int, "false" := Bool]) =>
        -- This constraint should be solvable
        -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["true" := Int, "false" := Bool]) =>
        -- V0 (R '["true" := Int, "false" := Bool]) -> Int -- This order shouldn't matter, but I don't know how to
        -- make "alpha"-equivalence work for row types yet.
-       (V0 (R '["false" := Bool] ~+~ (R0 ["true" := Int]))) -> Int
+       (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
 bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
 bar1 :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["false" := Bool, "true" := Int]) =>
        -- This constraint should be solvable
        -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["false" := Bool, "true" := Int]) =>
-       (V0 (R0 ["true" := Int]) ~+~ (R0 '["false" := Bool])) -> Int
+       (V0 (R '["true" := Int] ~+~ R '["false" := Bool])) -> Int
 bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
 -- This is a *less* compelling argument against than I thought, but still
@@ -127,20 +119,19 @@ bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
 --        inj0 @z
 
-bar2 :: forall y1 y2.
+bar2 :: forall z y1 y2.
         -- Bit of a run-around here because GHC doesn't like `z ~<~ x ~+~ y` constraints
-        (-- Plus (R '["x" := Integer]) z y1,    -- `Integer` so defaulting doesn't get in the way
-         -- Plus (R '["x" := Bool]) z y2,
+        (Plus (R '["x" := Integer]) z y1,    -- `Integer` so defaulting doesn't get in the way
+         Plus (R '["x" := Bool]) z y2,
          -- These three constraint should all be solvable, *given the definitions above*
-         -- R '["x" := Bool] ~<~ R '["x" := Bool],
-         -- R '["x" := Bool] ~<~ y2,
-          R '["x" := Bool] ~<~ y1
-        , y1 ~<~ y2
+         R '["x" := Bool] ~<~ R '["x" := Bool],
+         R '["x" := Bool] ~<~ y2,
+         z ~<~ y2
         ) =>
         V0 y1 -> V0 y2
 bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
   where zero :: Integer = 0
-
+{-
 -- Okay, let's try Rω again.  Same fundamental problem: we need to replace the use of type-level λs.
 
 type family Each :: (a -> b) -> Row a -> Row b where

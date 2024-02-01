@@ -34,3 +34,14 @@ class Plus (x :: Row t) (y :: Row t) (z :: Row t) | x y -> z, x z -> y, y z -> x
 
 -- But if this is going to *actually* work, we're going to need to step in with
 -- some defaulting to actually fix `z`s.
+
+
+
+-- Records ahoy
+type family R0 :: Row Type -> Type -- how do the terms which inhabit this type look like
+type family R1 :: Row (a -> Type) -> a -> Type -- term level re
+
+
+-- Let's repeat the tedium for variants...
+type family V0 :: Row Type -> Type
+type family V1 :: Row (a -> Type) -> a -> Type
