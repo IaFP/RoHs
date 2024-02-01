@@ -12,8 +12,11 @@ import GHC.Utils.Outputable
 
 -- ghc-tcplugin-api
 import qualified GHC.TcPlugin.API as API
-import GHC.Builtin.Types (listTyCon, mkPromotedListTy)
-import GHC.TcPlugin.API ( TcPluginErrorMessage(..) )
+import GHC.Builtin.Types (mkPromotedListTy)
+import GHC.Core.TyCo.Rep
+-- import GHC.TcPlugin.API ( TcPluginErrorMessage(..) )
+
+import Data.List (sortBy)
 
 -- TODOs: The plugin should enable replacing class Common.Plus with Common.(~+~)
 
@@ -95,26 +98,36 @@ tcPluginStop _ = do
 
 -- We have to possibly rewrite ~+~ type family applications
 tcPluginRewrite :: PluginDefs -> API.UniqFM API.TyCon API.TcPluginRewriter
-tcPluginRewrite defs@(PluginDefs {rowPlusTyCon}) = API.listToUFM [(rowPlusTyCon, rewrite_rowplus defs)]
+tcPluginRewrite defs@(PluginDefs {rowPlusTyCon, rTyCon}) = API.listToUFM [ (rowPlusTyCon, rewrite_rowplus defs)
+                                                                         , (rTyCon, canonicalize_rowTy defs)
+                                                                         ]
+
+canonicalize_rowTy :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
+canonicalize_rowTy (PluginDefs { .. }) givens tys
+  = do API.tcPluginTrace "--Plugin RowConcatRewrite rowTy--" (vcat [ ppr givens $$ ppr tys ])
+       pure API.TcPluginNoRewrite
+
+
 
 rewrite_rowplus :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
-rewrite_rowplus pdefs@(PluginDefs { .. }) _givens tys
+rewrite_rowplus (PluginDefs { .. }) _givens tys
   | [k, a, b] <- tys
   = if
       | Just (_ , [_, arg_a]) <- API.splitTyConApp_maybe a
       , Just (_ , [_, arg_b]) <- API.splitTyConApp_maybe b
       , Just (_, assocs_a) <- API.splitTyConApp_maybe arg_a
       , Just (_, assocs_b) <- API.splitTyConApp_maybe arg_b
-      , let args = (init $ tail assocs_a) ++ (init $ tail assocs_b)
+      , let args = sortAssocs $ (init $ tail assocs_a) ++ (init $ tail assocs_b)
             rowAssocKi = head assocs_a
-      -> do API.tcPluginTrace "--Plugin RowConcatRewrite--" (vcat [ text "args_a:" <+> ppr assocs_a
+      -> do API.tcPluginTrace "--Plugin RowConcatRewrite (~+~)--" (vcat [ text "args_a:" <+> ppr assocs_a
                                                                   , text "args_b:" <+> ppr assocs_b
                                                                   , text "args:"   <+> ppr args
+                                                                  , text "givens:" <+> ppr _givens
                                                                   ]
                                                             )
             pure $ API.TcPluginRewriteTo
-                           (API.mkTyFamAppReduction "RoHsPlugin" API.Representational rowPlusTyCon [k, a, b]
-                               (API.mkTyConApp rTyCon [k, mkPromotedListTy rowAssocKi (args)]))
+                           (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal rowPlusTyCon [k, a, b]
+                               (API.mkTyConApp rTyCon [k, mkPromotedListTy rowAssocKi args]))
                            []
             -- pure API.TcPluginNoRewrite
       | otherwise
@@ -123,14 +136,16 @@ rewrite_rowplus pdefs@(PluginDefs { .. }) _givens tys
   = do API.tcPluginTrace "other tyfam" (ppr tys)
        pure API.TcPluginNoRewrite
 
+-- At this point i'm just sorting on the kind of the type which happens to be a string literal, Sigh ...
+cmpAssoc :: API.TcType -> API.TcType -> Ordering
+cmpAssoc lty rty | Just (_, [_, LitTy lbl_l, _]) <- API.splitTyConApp_maybe lty
+                 , Just (_, [_, LitTy lbl_r, _]) <- API.splitTyConApp_maybe rty
+                 = cmpTyLit lbl_l lbl_r
+cmpAssoc _ _ = EQ
 
--- rewriteWanteds :: [API.Ct] -> [(API.EvTerm, API.Ct)]
--- rewriteWanteds = fmap mb_rewriteCt
-
--- maybe rewrite cosntraint. if you see a ~+~ constraint, rewrite it to its canonical form
--- else return it as is
--- mb_rewriteCt :: API.Ct -> Maybe (API.EvTerm,  API.Ct)
--- mb_rewriteCt ct = (API.mkPluginUnivCo "RoHsAssertsOk" API.Representational () (), ct)
+-- This is the "cannonical/principal" type representation of a row type
+sortAssocs :: [API.TcType] -> [API.TcType]
+sortAssocs = sortBy cmpAssoc
 
 
 -- Return the given type family reduction, while emitting an additional type error with the given message.

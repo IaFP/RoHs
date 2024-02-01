@@ -103,9 +103,11 @@ case1 f = f . unlabV1
 bar :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["true" := Int, "false" := Bool]) =>
        -- This constraint should be solvable
        -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["true" := Int, "false" := Bool]) =>
-       V0 (R '["true" := Int, "false" := Bool]) -> Int
+       -- V0 (R '["true" := Int, "false" := Bool]) -> Int -- This order shouldn't matter, but I don't know how to
+       -- make "alpha"-equivalence work for row types yet.
+       V0 (R '["false" := Bool, "true" := Int]) -> Int
 bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
-{-
+
 bar1 :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["false" := Bool, "true" := Int]) =>
        -- This constraint should be solvable
        -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["false" := Bool, "true" := Int]) =>
@@ -124,17 +126,20 @@ bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 --         V0 (R '["x" := Int] ~+~ z) -> V0 y
 -- bar2 = case0 @"x" (\(i :: Int) -> con0 @"x" (i == 0)) `brn0`
 --        inj0 @z
-
-bar2 :: forall z y1 y2.
+{-
+bar2 :: forall y1 y2.
         -- Bit of a run-around here because GHC doesn't like `z ~<~ x ~+~ y` constraints
-        (Plus (R '["x" := Integer]) z y1,    -- `Integer` so defaulting doesn't get in the way
-         Plus (R '["x" := Bool]) z y2,
+        (-- Plus (R '["x" := Integer]) z y1,    -- `Integer` so defaulting doesn't get in the way
+         -- Plus (R '["x" := Bool]) z y2,
          -- These three constraint should all be solvable, *given the definitions above*
-         R '["x" := Bool] ~<~ R '["x" := Bool],
-         R '["x" := Bool] ~<~ y2,
-         z ~<~ y2) =>
+         -- R '["x" := Bool] ~<~ R '["x" := Bool],
+         -- R '["x" := Bool] ~<~ y2,
+          R '["x" := Bool] ~<~ y1
+        , y1 ~<~ y2
+        ) =>
         V0 y1 -> V0 y2
-bar2 = case0 @"x" (\i -> con0 @"x" (i == (0 :: Integer))) `brn0` inj0
+bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
+  where zero :: Integer = 0
 
 -- Okay, let's try Rω again.  Same fundamental problem: we need to replace the use of type-level λs.
 

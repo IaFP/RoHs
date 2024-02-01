@@ -53,7 +53,7 @@ extra-doc-files:    CHANGELOG.md
 
 common ghcopts
     ghc-options: -Wall
-    -- -ddump-tc-trace
+                 -- -ddump-tc-trace
 
 library
     -- Import common warning flags.
@@ -72,8 +72,8 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.17.2.0,
-                      ghc ^>=9.4.7,
+    build-depends:    base ^>=4.18,
+                      ghc ^>=9.6.4,
                       ghc-tcplugin-api ^>= 0.11.0.0
 
     -- Directories containing source files.

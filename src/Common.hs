@@ -2,11 +2,11 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Common where
 
 import GHC.Base
-import GHC.TypeLits
 
 data Row :: Type -> Type where
   R :: [Assoc a] -> Row a
