@@ -11,7 +11,7 @@ import Surface
 
 import GHC.Base
 
-
+{-
 bar2 :: forall z y1 y2.
         -- Bit of a run-around here because GHC doesn't like `z ~<~ x ~+~ y` constraints
         (-- Plus (R '["x" := Integer]) z y1,    -- `Integer` so defaulting doesn't get in the way
@@ -28,3 +28,4 @@ bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
 -- Could not deduce ‘(R '["x" := Integer] ~+~ y0) ~ y1
 --       from the context: ((R '["x" := Bool] ~+~ z) ~ y2,
 --                          (R '["x" := Integer] ~+~ z) ~ y1)
+-}
