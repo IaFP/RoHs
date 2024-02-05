@@ -62,6 +62,7 @@ library
     -- Modules exported by the library.
     exposed-modules:  Surface
                       RoHsPlugin
+                      RoHsCorePlugin
                       Common
                       Example
 

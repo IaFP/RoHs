@@ -2,7 +2,7 @@
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
-{-# OPTIONS -fplugin RoHsPlugin #-}
+{-# OPTIONS -fplugin RoHsPlugin -fplugin RoHsCorePlugin #-}
 
 module Surface where
 
@@ -27,8 +27,8 @@ unlabR0 = undefined
 prj0 :: forall z y. z ~<~ y => R0 y -> R0 z
 prj0 = undefined
 
-cat0 :: R0 y -> R0 z -> R0 (y ~+~ z)
--- cat0 :: Plus y z x => R0 y -> R0 z -> R0 x
+-- cat0 :: R0 y -> R0 z -> R0 (y ~+~ z)
+cat0 :: Plus y z x => R0 y -> R0 z -> R0 x
 cat0 _ _ = undefined
 
 -- Sigh...
@@ -42,8 +42,8 @@ unlabR1 = undefined
 prj1 :: z ~<~ y => R1 y t -> R1 z t
 prj1 = undefined
 
-cat1 :: R1 y t -> R1 z t -> R1 (y ~+~ z) t
--- cat1 :: Plus y z x => R1 y t -> R1 z t -> R1 x t
+-- cat1 :: R1 y t -> R1 z t -> R1 (y ~+~ z) t
+cat1 :: Plus y z x => R1 y t -> R1 z t -> R1 x t
 cat1 _ _ = undefined
 
 sel0 :: forall s {t} {z}. R '[s := t] ~<~ z => R0 z -> t
@@ -68,8 +68,8 @@ inj0 = undefined
 inj1 :: y ~<~ z => V1 y t -> V1 z t
 inj1 = undefined
 
-brn0 :: (V0 x -> t) -> (V0 y -> t) -> V0 (x ~+~ y) -> t
--- brn0 :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
+-- brn0 :: (V0 x -> t) -> (V0 y -> t) -> V0 (x ~+~ y) -> t
+brn0 :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
 brn0 = undefined
 
 brn1 :: (V1 x t -> u) -> (V1 y t -> u) -> V1 (x ~+~ y) t -> u
@@ -91,7 +91,7 @@ case1 :: forall s {f} {t} {u}. (f t -> u) -> V1 (R '[s := f]) t -> u
 case1 f = f . unlabV1
 
 --
-
+{-
 bar :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["true" := Int, "false" := Bool]) =>
        -- This constraint should be solvable
        -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["true" := Int, "false" := Bool]) =>
@@ -122,16 +122,16 @@ bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 bar2 :: forall z y1 y2.
         -- Bit of a run-around here because GHC doesn't like `z ~<~ x ~+~ y` constraints
         (Plus (R '["x" := Integer]) z y1,    -- `Integer` so defaulting doesn't get in the way
-         Plus (R '["x" := Bool]) z y2,
+         Plus (R '["x" := Bool]) z y2
          -- These three constraint should all be solvable, *given the definitions above*
-         R '["x" := Bool] ~<~ R '["x" := Bool],
-         R '["x" := Bool] ~<~ y2,
-         z ~<~ y2
+         -- R '["x" := Bool] ~<~ R '["x" := Bool],
+         -- R '["x" := Bool] ~<~ y2,
+         -- z ~<~ y2
         ) =>
         V0 y1 -> V0 y2
 bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
   where zero :: Integer = 0
-{-
+
 -- Okay, let's try Rω again.  Same fundamental problem: we need to replace the use of type-level λs.
 
 type family Each :: (a -> b) -> Row a -> Row b where
