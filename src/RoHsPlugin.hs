@@ -88,7 +88,14 @@ tcPluginSolve _ givens [] = do -- simplify given constraints
   pure $ API.TcPluginOk [] []
 tcPluginSolve _ givens wanteds = do
   API.tcPluginTrace "--Plugin Solve--" (ppr givens $$ ppr wanteds)
+  -- (solved, unsolved_wanteds) <- foldl solve_trivial ([], [])  wanteds
+  -- (new_givens, new_wanteds) <- foldl ([], []) (convert_gs) givens
   pure $ API.TcPluginOk [] []
+
+-- Converts a
+-- convert_gs :: API.Ct -> ([(EvTerm, API.Ct)], [API.Ct])
+solve_trivial :: API.Ct -> ([(API.EvTerm, API.Ct)], [API.Ct])
+solve_trivial _ = ([], [])
 
 -- Nothing to shutdown.
 tcPluginStop :: PluginDefs -> API.TcPluginM API.Stop ()
@@ -106,7 +113,6 @@ canonicalize_rowTy :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM AP
 canonicalize_rowTy (PluginDefs { .. }) givens tys
   = do API.tcPluginTrace "--Plugin RowConcatRewrite rowTy--" (vcat [ ppr givens $$ ppr tys ])
        pure API.TcPluginNoRewrite
-
 
 
 rewrite_rowplus :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult

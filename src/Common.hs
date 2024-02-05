@@ -30,7 +30,7 @@ type family (~+~) (a :: Row t) (b :: Row t) = (c :: Row t)
 -- But that's more than just an injective type family.  We can make more
 -- progress using the following definition:
 
-class Plus (x :: Row t) (y :: Row t) (z :: Row t) | x y -> z, x z -> y, y z -> x
+class (x ~<~ z, y ~<~ z) => Plus (x :: Row t) (y :: Row t) (z :: Row t) | x y -> z, x z -> y, y z -> x
 
 -- But if this is going to *actually* work, we're going to need to step in with
 -- some defaulting to actually fix `z`s.
