@@ -7,16 +7,25 @@
 {-# LANGUAGE RecordWildCards #-}
 module RoHsPlugin (plugin) where
 
-import qualified GHC.Plugins as GHC (Plugin(..), defaultPlugin, purePlugin)
+import qualified GHC.Plugins as GHC (Plugin(..), defaultPlugin, purePlugin, mkLocalId)
 import GHC.Utils.Outputable
 
 -- ghc-tcplugin-api
 import qualified GHC.TcPlugin.API as API
-import GHC.Builtin.Types (mkPromotedListTy)
 import GHC.Core.TyCo.Rep
 -- import GHC.TcPlugin.API ( TcPluginErrorMessage(..) )
+import GHC.Core
+import GHC.Core.Make
+import GHC.Core.Type
 
 import Data.List (sortBy)
+import Data.Foldable (foldlM)
+
+import GHC.Types.Name      ( mkInternalName, tcName )
+import GHC.Types.Name.Occurrence   ( mkOccName )
+import GHC.Types.Unique
+import GHC.Types.SrcLoc
+import GHC.Builtin.Types
 
 -- TODOs: The plugin should enable replacing class Common.Plus with Common.(~+~)
 
@@ -45,10 +54,12 @@ data PluginDefs =
   PluginDefs
     { rowPlusTyCon     :: !API.TyCon -- standin for ~+~
     , rowLeqClass      :: !API.Class -- standin for ~<~
+    , rowPlusCls       :: !API.Class -- standin for Plus
     , rowTyCon         :: !API.TyCon -- standin for Row
     , rTyCon           :: !API.TyCon -- standin for R
     , rowAssoc         :: !API.TyCon -- standin for :=
     , rowAssocTy       :: !API.TyCon -- standin for Assoc
+
     }
 
 
@@ -73,12 +84,14 @@ tcPluginInit = do
   rTyCon         <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc "R")
   rowAssoc       <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc ":=")
   rowAssocTy     <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Assoc")
+  rowPlusCls     <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "Plus")
   pure (PluginDefs { rowPlusTyCon
                    , rowLeqClass
                    , rowTyCon
                    , rTyCon
                    , rowAssoc
                    , rowAssocTy
+                   , rowPlusCls
                    })
 
 -- The entry point for constraint solving
@@ -86,16 +99,81 @@ tcPluginSolve :: PluginDefs -> [ API.Ct ] -> [ API.Ct ] -> API.TcPluginM API.Sol
 tcPluginSolve _ givens [] = do -- simplify given constraints
   API.tcPluginTrace "--Plugin Solve Simplify--" (ppr givens)
   pure $ API.TcPluginOk [] []
-tcPluginSolve _ givens wanteds = do
+tcPluginSolve defs givens wanteds = do
   API.tcPluginTrace "--Plugin Solve--" (ppr givens $$ ppr wanteds)
-  -- (solved, unsolved_wanteds) <- foldl solve_trivial ([], [])  wanteds
+  (solved, unsolved_wanteds) <- foldlM (solve_trivial defs) ([], [])  wanteds
   -- (new_givens, new_wanteds) <- foldl ([], []) (convert_gs) givens
-  pure $ API.TcPluginOk [] []
+  pure $ API.TcPluginOk solved unsolved_wanteds
 
 -- Converts a
 -- convert_gs :: API.Ct -> ([(EvTerm, API.Ct)], [API.Ct])
-solve_trivial :: API.Ct -> ([(API.EvTerm, API.Ct)], [API.Ct])
-solve_trivial _ = ([], [])
+solve_trivial :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve ([(API.EvTerm, API.Ct)], [API.Ct])
+solve_trivial PluginDefs{..} acc ct | predTy <- API.ctPred ct
+                          , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
+                          , clsCon == API.classTyCon rowPlusCls
+                          , Just x_s@(_r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
+                          , Just y_s@(_r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
+                          , Just z_s@(_r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
+                          , let xs = sortAssocs $ fold_list_type_elems assocs_x
+                          , let ys = sortAssocs $ fold_list_type_elems assocs_y
+                          , let zs = sortAssocs $ fold_list_type_elems assocs_z
+                          , let args = sortAssocs $ xs ++ ys
+                          = if (length args == length zs)
+                                && all (\(l, r) -> API.eqType l r) (zip args (init zs))
+                            then do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" (vcat [ ppr clsCon
+                                                                                 , ppr x_s, ppr xs
+                                                                                 , ppr y_s, ppr ys
+                                                                                 , ppr z_s, ppr zs ])
+                                    ; return ([(mkIdFunEvTerm predTy, ct)], []) }
+                            else do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
+                                                                                 , ppr x_s, ppr xs
+                                                                                 , ppr y_s, ppr ys
+                                                                                 , ppr z_s, ppr zs ])
+                                    ; return acc }
+                          | otherwise = return acc
+
+
+-- Some constraint solving just results to having identity functions as evidence
+mkIdFunEvTerm :: Type -> API.EvTerm
+mkIdFunEvTerm predTy = API.evCast (mkCoreLams [a, x] (Var x)) co
+  where
+    mkName :: Int -> String -> API.Name
+    mkName i n = mkInternalName (mkLocalUnique i) (mkOccName tcName n) noSrcSpan
+
+    xn :: API.Name
+    xn = mkName 0 "x"
+
+
+    an :: API.Name
+    an = mkName 1 "a"
+
+    a :: API.TyVar
+    a = API.mkTyVar an liftedTypeKind
+
+    -- x :: a
+    x :: API.Id
+    x = GHC.mkLocalId xn manyDataConTy (TyVarTy a)
+
+    -- \forall a. a -> a
+    idTy :: Type
+    idTy = mkForAllTy (mkForAllTyBinder Inferred a) $ mkVisFunTy manyDataConTy (TyVarTy a) (TyVarTy a)
+
+    co :: Coercion
+    co = API.mkPluginUnivCo "Proven by Le RoHsPlugin" API.Representational idTy predTy
+
+-- If you get a list of assocs, flatten it out
+fold_list_type_elems :: API.TcType -> [API.TcType]
+fold_list_type_elems =  go []
+  where
+    go :: [API.TcType] -> API.TcType -> [API.TcType]
+    go acc ty | Nothing <- API.splitTyConApp_maybe ty
+              = acc
+              | Just (_, [_, assoc]) <- API.splitTyConApp_maybe ty
+              = assoc : acc
+              | Just (_, [_, assoc, rest]) <- API.splitTyConApp_maybe ty
+              = go (assoc : acc) rest
+              | otherwise
+              = acc
 
 -- Nothing to shutdown.
 tcPluginStop :: PluginDefs -> API.TcPluginM API.Stop ()
@@ -105,14 +183,14 @@ tcPluginStop _ = do
 
 -- We have to possibly rewrite ~+~ type family applications
 tcPluginRewrite :: PluginDefs -> API.UniqFM API.TyCon API.TcPluginRewriter
-tcPluginRewrite defs@(PluginDefs {rowPlusTyCon, rTyCon}) = API.listToUFM [ (rowPlusTyCon, rewrite_rowplus defs)
-                                                                         , (rTyCon, canonicalize_rowTy defs)
+tcPluginRewrite defs@(PluginDefs {rowPlusTyCon}) = API.listToUFM [ (rowPlusTyCon, rewrite_rowplus defs)
+                                                                         -- , (rTyCon, canonicalize_rowTy defs)
                                                                          ]
 
-canonicalize_rowTy :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
-canonicalize_rowTy (PluginDefs { .. }) givens tys
-  = do API.tcPluginTrace "--Plugin RowConcatRewrite rowTy--" (vcat [ ppr givens $$ ppr tys ])
-       pure API.TcPluginNoRewrite
+-- canonicalize_rowTy :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
+-- canonicalize_rowTy (PluginDefs { .. }) givens tys
+--   = do API.tcPluginTrace "--Plugin RowConcatRewrite rowTy--" (vcat [ ppr givens $$ ppr tys ])
+--        pure API.TcPluginNoRewrite
 
 
 rewrite_rowplus :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
