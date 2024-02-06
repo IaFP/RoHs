@@ -2,7 +2,7 @@
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
-{-# OPTIONS -fplugin RoHsPlugin -fplugin RoHsCorePlugin #-}
+{-# OPTIONS -fplugin RoHsPlugin #-}
 
 module Surface where
 
@@ -94,15 +94,15 @@ case1 f = f . unlabV1
 bar :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["true" := Int, "false" := Bool]) =>
        -- This constraint should be solvable
        -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["true" := Int, "false" := Bool]) =>
-       -- V0 (R '["true" := Int, "false" := Bool]) -> Int -- This order shouldn't matter, but I don't know how to
+       V0 (R '["true" := Int, "false" := Bool]) -> Int -- This order shouldn't matter, but I don't know how to
        -- make "alpha"-equivalence work for row types yet.
-       (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
+       -- (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
 bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
 bar1 :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["false" := Bool, "true" := Int]) =>
        -- This constraint should be solvable
        -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["false" := Bool, "true" := Int]) =>
-       (V0 (R '["true" := Int] ~+~ R '["false" := Bool])) -> Int
+       (V0 (R '["false" := Bool] ~+~ R '["true" := Int])) -> Int
 bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
 -- This is a *less* compelling argument against than I thought, but still
@@ -206,10 +206,6 @@ data OneF a    = C1 a
   deriving Functor
 data TwoF a    = C2 a a
   deriving Functor
-
-type BigR = R '["Const" := ZeroF Int, "Add" := TwoF, "Double" := OneF]
-
-type SmallR = R '["Const" := ZeroF Int, "Add" := TwoF]
 
 newtype Mu f = Wrap {unwrap :: f (Mu f)}
 {-

@@ -129,7 +129,8 @@ solve_trivial PluginDefs{..} acc ct | predTy <- API.ctPred ct
                                                                                  , ppr x_s, ppr xs
                                                                                  , ppr y_s, ppr ys
                                                                                  , ppr z_s, ppr zs ])
-                                    ; return acc }
+                                    ; return acc } -- no need to actually throw error.
+                                                   -- it might fail down the tc pipleline anyway witha good error message
                           | otherwise = return acc
 
 
@@ -159,7 +160,10 @@ mkIdFunEvTerm predTy = API.evCast (mkCoreLams [a, x] (Var x)) co
     idTy = mkForAllTy (mkForAllTyBinder Inferred a) $ mkVisFunTy manyDataConTy (TyVarTy a) (TyVarTy a)
 
     co :: Coercion
-    co = API.mkPluginUnivCo "Proven by Le RoHsPlugin" API.Representational idTy predTy
+    co = mkCoercion API.Representational idTy predTy
+
+mkCoercion :: API.Role -> Type -> Type -> Coercion
+mkCoercion = API.mkPluginUnivCo "Proven by Le RoHsPlugin"
 
 -- If you get a list of assocs, flatten it out
 fold_list_type_elems :: API.TcType -> [API.TcType]
@@ -184,8 +188,14 @@ tcPluginStop _ = do
 -- We have to possibly rewrite ~+~ type family applications
 tcPluginRewrite :: PluginDefs -> API.UniqFM API.TyCon API.TcPluginRewriter
 tcPluginRewrite defs@(PluginDefs {rowPlusTyCon}) = API.listToUFM [ (rowPlusTyCon, rewrite_rowplus defs)
-                                                                         -- , (rTyCon, canonicalize_rowTy defs)
-                                                                         ]
+                                                                   -- , (rTyCon, intercept_tyfam defs)
+                                                                 ]
+
+-- intercept_tyfam :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
+-- intercept_tyfam (PluginDefs { .. }) givens tys
+--   = do API.tcPluginTrace "--Plugin RowConcatRewrite TF--" (vcat [ ppr givens $$ ppr tys ])
+--        pure API.TcPluginNoRewrite
+
 
 -- canonicalize_rowTy :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
 -- canonicalize_rowTy (PluginDefs { .. }) givens tys
@@ -199,19 +209,19 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
   = if
       | Just (_ , [_, arg_a]) <- API.splitTyConApp_maybe a
       , Just (_ , [_, arg_b]) <- API.splitTyConApp_maybe b
-      , Just (_, assocs_a) <- API.splitTyConApp_maybe arg_a
-      , Just (_, assocs_b) <- API.splitTyConApp_maybe arg_b
-      , let args = sortAssocs $ (init $ tail assocs_a) ++ (init $ tail assocs_b)
+      , assocs_a <- fold_list_type_elems arg_a
+      , assocs_b <- fold_list_type_elems arg_b
+      , let concat_assocs = sortAssocs $ assocs_a ++ assocs_b
             rowAssocKi = head assocs_a
       -> do API.tcPluginTrace "--Plugin RowConcatRewrite (~+~)--" (vcat [ text "args_a:" <+> ppr assocs_a
                                                                   , text "args_b:" <+> ppr assocs_b
-                                                                  , text "args:"   <+> ppr args
+                                                                  , text "args:"   <+> ppr concat_assocs
                                                                   , text "givens:" <+> ppr _givens
                                                                   ]
                                                             )
             pure $ API.TcPluginRewriteTo
                            (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal rowPlusTyCon [k, a, b]
-                               (API.mkTyConApp rTyCon [k, mkPromotedListTy rowAssocKi args]))
+                               (API.mkTyConApp rTyCon [k, mkPromotedListTy rowAssocKi concat_assocs]))
                            []
             -- pure API.TcPluginNoRewrite
       | otherwise

@@ -3,13 +3,28 @@
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
-{-# OPTIONS -fplugin RoHsPlugin #-}
+{-# OPTIONS -fplugin RoHsPlugin -fplugin RoHsCorePlugin #-}
+{-# OPTIONS -fforce-recomp #-}
 
 module Example where
 import Common
 import Surface
 
-import GHC.Base
+-- import GHC.Base
+
+
+type BigR = R '["Const" := ZeroF Int] ~+~  R '["Add" := TwoF] ~+~ R '["Double" := OneF]
+
+type SmallR = R '["Const" := ZeroF Int] ~+~ R '["Add" := TwoF]
+
+desugar :: (-- These should all be solvable
+            All Functor SmallR,
+            Plus (R '["Double" := OneF]) SmallR BigR
+           ) =>
+           Mu (V1 BigR) -> Mu (V1 SmallR)
+desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
+  double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
+
 
 {-
 bar2 :: forall z y1 y2.
