@@ -8,9 +8,6 @@ module Surface where
 
 import Common
 
-import GHC.Base
-
-
 -- See if we can do anything
 
 foo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool]))
@@ -91,7 +88,7 @@ case1 :: forall s {f} {t} {u}. (f t -> u) -> V1 (R '[s := f]) t -> u
 case1 f = f . unlabV1
 
 --
-{-
+
 bar :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["true" := Int, "false" := Bool]) =>
        -- This constraint should be solvable
        -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["true" := Int, "false" := Bool]) =>
@@ -131,7 +128,7 @@ bar2 :: forall z y1 y2.
         V0 y1 -> V0 y2
 bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
   where zero :: Integer = 0
-
+{-
 -- Okay, let's try Rω again.  Same fundamental problem: we need to replace the use of type-level λs.
 
 type family Each :: (a -> b) -> Row a -> Row b where

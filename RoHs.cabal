@@ -53,7 +53,8 @@ extra-doc-files:    CHANGELOG.md
 
 common ghcopts
     ghc-options: -Wall
-                 -- -ddump-tc-trace
+                 -ddump-tc-trace
+                 -dcore-lint
 
 library
     -- Import common warning flags.
