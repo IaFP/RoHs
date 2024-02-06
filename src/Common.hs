@@ -22,7 +22,7 @@ data Assoc :: Type -> Type where
 
 class (~<~) (a :: Row t) (b :: Row t)
   -- probably shouldn't have user instances of this class... :P
-instance a ~<~ a
+-- instance a ~<~ a
 
 -- This is what I really want:
 type family (~+~) (a :: Row t) (b :: Row t) = (c :: Row t)

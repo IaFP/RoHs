@@ -213,9 +213,7 @@ type BigR = R '["Const" := ZeroF Int] ~+~  R '["Add" := TwoF] ~+~ R '["Double" :
 type SmallR = R '["Const" := ZeroF Int] ~+~ R '["Add" := TwoF]
 
 -- Here's a very explicit type...
-desugar :: (All Functor SmallR,
-            Plus (R '["Double" := OneF]) SmallR BigR)
-        => Mu (V1 BigR) -> Mu (V1 SmallR)
+desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
 desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
 

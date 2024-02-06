@@ -104,7 +104,9 @@ tcPluginSolve defs givens wanteds = do
   -- (new_givens, new_wanteds) <- foldl ([], []) (convert_gs) givens
   pure $ API.TcPluginOk solved unsolved_wanteds
 
--- Converts a
+-- | Solves simple wanteds like
+--   Plus (x := t) (y := u) (x := t ~+~ y := u) etc
+--
 -- convert_gs :: API.Ct -> ([(EvTerm, API.Ct)], [API.Ct])
 solve_trivial :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve ([(API.EvTerm, API.Ct)], [API.Ct])
 solve_trivial PluginDefs{..} acc ct
@@ -131,6 +133,14 @@ solve_trivial PluginDefs{..} acc ct
                                                                                  , ppr z_s, ppr zs ])
             ; return acc } -- no need to actually throw error.
                            -- it might fail down the tc pipleline anyway witha good error message
+  | predTy <- API.ctPred ct
+  , Just (clsCon, ([_, x, y])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowLeqCls
+  , API.eqType x y -- if x ~<~ x definitely holds
+  = do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" (vcat [ ppr clsCon
+                                                         , ppr x , ppr y ])
+       ; return ([(mkIdFunEvTerm predTy, ct)], []) }
+
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowLeqCls
