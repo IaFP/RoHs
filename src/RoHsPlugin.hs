@@ -53,13 +53,12 @@ tcPlugin =
 data PluginDefs =
   PluginDefs
     { rowPlusTyCon     :: !API.TyCon -- standin for ~+~
-    , rowLeqClass      :: !API.Class -- standin for ~<~
+    , rowLeqCls        :: !API.Class -- standin for ~<~
     , rowPlusCls       :: !API.Class -- standin for Plus
     , rowTyCon         :: !API.TyCon -- standin for Row
     , rTyCon           :: !API.TyCon -- standin for R
     , rowAssoc         :: !API.TyCon -- standin for :=
     , rowAssocTy       :: !API.TyCon -- standin for Assoc
-
     }
 
 
@@ -79,14 +78,14 @@ tcPluginInit = do
   API.tcPluginTrace "--Plugin Init--" empty
   commonModule   <- findCommonModule
   rowPlusTyCon   <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "~+~")
-  rowLeqClass    <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "~<~")
+  rowLeqCls      <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "~<~")
   rowTyCon       <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Row")
   rTyCon         <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc "R")
   rowAssoc       <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc ":=")
   rowAssocTy     <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Assoc")
   rowPlusCls     <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "Plus")
   pure (PluginDefs { rowPlusTyCon
-                   , rowLeqClass
+                   , rowLeqCls
                    , rowTyCon
                    , rTyCon
                    , rowAssoc
@@ -108,31 +107,55 @@ tcPluginSolve defs givens wanteds = do
 -- Converts a
 -- convert_gs :: API.Ct -> ([(EvTerm, API.Ct)], [API.Ct])
 solve_trivial :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve ([(API.EvTerm, API.Ct)], [API.Ct])
-solve_trivial PluginDefs{..} acc ct | predTy <- API.ctPred ct
-                          , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
-                          , clsCon == API.classTyCon rowPlusCls
-                          , Just x_s@(_r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
-                          , Just y_s@(_r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
-                          , Just z_s@(_r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
-                          , let xs = sortAssocs $ fold_list_type_elems assocs_x
-                          , let ys = sortAssocs $ fold_list_type_elems assocs_y
-                          , let zs = sortAssocs $ fold_list_type_elems assocs_z
-                          , let args = sortAssocs $ xs ++ ys
-                          = if (length args == length zs)
-                                && all (\(l, r) -> API.eqType l r) (zip args (init zs))
-                            then do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" (vcat [ ppr clsCon
+solve_trivial PluginDefs{..} acc ct
+  | predTy <- API.ctPred ct
+  , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowPlusCls
+  , Just x_s@(_r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
+  , Just y_s@(_r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
+  , Just z_s@(_r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
+  , let xs = sortAssocs $ fold_list_type_elems assocs_x
+  , let ys = sortAssocs $ fold_list_type_elems assocs_y
+  , let zs = sortAssocs $ fold_list_type_elems assocs_z
+  , let args = sortAssocs $ xs ++ ys
+  = if (length args == length zs)
+           && all (\(l, r) -> API.eqType l r) (zip args (init zs))
+    then do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" (vcat [ ppr clsCon
                                                                                  , ppr x_s, ppr xs
                                                                                  , ppr y_s, ppr ys
                                                                                  , ppr z_s, ppr zs ])
-                                    ; return ([(mkIdFunEvTerm predTy, ct)], []) }
-                            else do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
+            ; return ([(mkIdFunEvTerm predTy, ct)], []) }
+    else do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
                                                                                  , ppr x_s, ppr xs
                                                                                  , ppr y_s, ppr ys
                                                                                  , ppr z_s, ppr zs ])
-                                    ; return acc } -- no need to actually throw error.
-                                                   -- it might fail down the tc pipleline anyway witha good error message
-                          | otherwise = return acc
+            ; return acc } -- no need to actually throw error.
+                           -- it might fail down the tc pipleline anyway witha good error message
+  | predTy <- API.ctPred ct
+  , Just (clsCon, ([_, x, y])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowLeqCls
+  , Just x_s@(_r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
+  , Just y_s@(_r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
+  , let xs = sortAssocs $ fold_list_type_elems assocs_x
+  , let ys = sortAssocs $ fold_list_type_elems assocs_y
+  = if (checkMembership xs ys)
+    then do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" (vcat [ ppr clsCon
+                                                         , ppr x_s, ppr xs
+                                                         , ppr y_s, ppr ys ])
+            ; return ([(mkIdFunEvTerm predTy, ct)], []) }
+    else do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
+                                                         , ppr x_s, ppr xs
+                                                         , ppr y_s, ppr ys])
+            ; return acc } -- no need to actually throw error.
+                           -- it might fail down the tc pipleline anyway witha good error message
 
+  | otherwise = return acc
+
+
+checkMembership :: [Type] -> [Type] -> Bool
+checkMembership [] _         =  True
+checkMembership _  []        =  False
+checkMembership (x:xs) (y:ys)=  (x `eqAssoc` y == EQ) && checkMembership xs ys
 
 -- Some constraint solving just results to having identity functions as evidence
 mkIdFunEvTerm :: Type -> API.EvTerm
@@ -223,7 +246,6 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
                            (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal rowPlusTyCon [k, a, b]
                                (API.mkTyConApp rTyCon [k, mkPromotedListTy rowAssocKi concat_assocs]))
                            []
-            -- pure API.TcPluginNoRewrite
       | otherwise
       -> pure API.TcPluginNoRewrite
   | otherwise
@@ -236,6 +258,13 @@ cmpAssoc lty rty | Just (_, [_, LitTy lbl_l, _]) <- API.splitTyConApp_maybe lty
                  , Just (_, [_, LitTy lbl_r, _]) <- API.splitTyConApp_maybe rty
                  = cmpTyLit lbl_l lbl_r
 cmpAssoc _ _ = EQ
+
+-- make GHC Type checker go brrr
+eqAssoc :: API.TcType -> API.TcType -> Ordering
+eqAssoc lty rty | Just (_, [_, LitTy lbl_l, _]) <- API.splitTyConApp_maybe lty
+                , Just (_, [_, LitTy lbl_r, _]) <- API.splitTyConApp_maybe rty
+                = cmpTyLit lbl_l lbl_r
+eqAssoc _ _ = GT
 
 -- This is the "cannonical/principal" type representation of a row type
 sortAssocs :: [API.TcType] -> [API.TcType]

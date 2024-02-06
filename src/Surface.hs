@@ -71,8 +71,8 @@ inj1 = undefined
 brn0 :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
 brn0 = undefined
 
-brn1 :: (V1 x t -> u) -> (V1 y t -> u) -> V1 (x ~+~ y) t -> u
--- brn1 :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
+-- brn1 :: (V1 x t -> u) -> (V1 y t -> u) -> V1 (x ~+~ y) t -> u
+brn1 :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
 brn1 = undefined
 
 -- and we can define
@@ -94,9 +94,9 @@ case1 f = f . unlabV1
 bar :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["true" := Int, "false" := Bool]) =>
        -- This constraint should be solvable
        -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["true" := Int, "false" := Bool]) =>
-       V0 (R '["true" := Int, "false" := Bool]) -> Int -- This order shouldn't matter, but I don't know how to
+       -- V0 (R '["true" := Int, "false" := Bool]) -> Int -- This order shouldn't matter, but I don't know how to
        -- make "alpha"-equivalence work for row types yet.
-       -- (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
+       (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
 bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
 bar1 :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["false" := Bool, "true" := Int]) =>
@@ -208,14 +208,14 @@ data TwoF a    = C2 a a
   deriving Functor
 
 newtype Mu f = Wrap {unwrap :: f (Mu f)}
-{-
+
+type BigR = R '["Const" := ZeroF Int] ~+~  R '["Add" := TwoF] ~+~ R '["Double" := OneF]
+type SmallR = R '["Const" := ZeroF Int] ~+~ R '["Add" := TwoF]
+
 -- Here's a very explicit type...
-desugar :: (-- These should all be solvable
-            All Functor SmallR,
-            Plus (R '["Double" := OneF]) SmallR BigR,
-            R '["Add" := TwoF] ~<~ SmallR,
-            SmallR ~<~ SmallR) =>
-           Mu (V1 BigR) -> Mu (V1 SmallR)
+desugar :: (All Functor SmallR,
+            Plus (R '["Double" := OneF]) SmallR BigR)
+        => Mu (V1 BigR) -> Mu (V1 SmallR)
 desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
 
@@ -224,10 +224,8 @@ desugar' :: forall bigr smallr.
            (-- These are essentially part of the type
             Plus (R '["Double" := OneF]) smallr bigr,
             All Functor smallr,
-            R '["Add" := TwoF] ~<~ smallr,
-            -- This should be solvable
-            smallr ~<~ smallr) =>
+            R '["Add" := TwoF] ~<~ smallr
+           ) =>
            Mu (V1 bigr) -> Mu (V1 smallr)
 desugar' (Wrap e) = Wrap ((double `brn1` (fmapV desugar' . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar' x) (desugar' x)))
--}

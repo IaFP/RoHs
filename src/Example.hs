@@ -12,9 +12,6 @@ import Surface
 
 -- import GHC.Base
 
-type BigR = R '["Const" := ZeroF Int] ~+~  R '["Add" := TwoF] ~+~ R '["Double" := OneF]
-
-type SmallR = R '["Const" := ZeroF Int] ~+~ R '["Add" := TwoF]
 
 desugar :: (-- These should all be solvable
             All Functor SmallR,
@@ -23,12 +20,6 @@ desugar :: (-- These should all be solvable
            Mu (V1 BigR) -> Mu (V1 SmallR)
 desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
-
-{-
-GHC currently cannot prove:
-  [W] hole{co_a5tT} {0}:: V1 BigR (Mu (V1 BigR))
-                          ~# V1 (x_a5tk[tau:1] ~+~ y_a5tn[tau:1]) t_a5tl[tau:1]
--}
 
 
 {-
