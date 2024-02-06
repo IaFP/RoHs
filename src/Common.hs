@@ -45,3 +45,16 @@ type family R1 :: Row (a -> Type) -> a -> Type -- term level re
 -- Let's repeat the tedium for variants...
 type family V0 :: Row Type -> Type
 type family V1 :: Row (a -> Type) -> a -> Type
+
+
+-- Okay, let's try Rω again.  Same fundamental problem: we need to replace the use of type-level λs.
+type family Each :: (a -> b) -> Row a -> Row b where
+  -- I have a feeling that this is not going to work out for me... see the
+  -- `constants` example below.  The crux of the issue is that I want to
+  -- "axiomatize" `Each f z` with statements like `y ~<~ z => Each f y ~<~ Each
+  -- f z`... but GHC is (reasonably...) upset at constraints on type synonyms.
+  --
+  -- Perhaps I could solve this problem by switching `Each` to a constraint-with
+  -- -fundep, but that seems hard to use...
+
+type family All :: (a -> Constraint) -> Row a -> Constraint where

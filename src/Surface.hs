@@ -8,6 +8,8 @@ module Surface where
 
 import Common
 
+import Data.Proxy
+
 -- See if we can do anything
 
 foo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool]))
@@ -128,57 +130,32 @@ bar2 :: forall z y1 y2.
         V0 y1 -> V0 y2
 bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
   where zero :: Integer = 0
-{-
--- Okay, let's try Rω again.  Same fundamental problem: we need to replace the use of type-level λs.
 
-type family Each :: (a -> b) -> Row a -> Row b where
-  -- I have a feeling that this is not going to work out for me... see the
-  -- `constants` example below.  The crux of the issue is that I want to
-  -- "axiomatize" `Each f z` with statements like `y ~<~ z => Each f y ~<~ Each
-  -- f z`... but GHC is (reasonably...) upset at constraints on type synonyms.
-  --
-  -- Perhaps I could solve this problem by switching `Each` to a constraint-with
-  -- -fundep, but that seems hard to use...
-
-type family All :: (a -> Constraint) -> Row a -> Constraint where
 
 ana0 :: forall z t.
-        (forall s y {u}. (Plus (R '[s := u]) y z,
-                          R '[s := u] ~<~ z,
-                          y ~<~ z) =>
-                          u -> t) ->
+        (forall s y {u}. (Plus (R '[s := u]) y z) => u -> t) ->
         V0 z -> t
 ana0 _ = undefined
 
 anaE0 :: forall phi {z} {t}.
-         (forall s y {u}. (Plus (R '[s := u]) y z,
-                           R '[s := u] ~<~ z,
-                           y ~<~ z) =>
-                           phi u -> t) ->
+         (forall s y {u}. (Plus (R '[s := u]) y z) => phi u -> t) ->
          V0 (Each phi z) -> t
 anaE0 _ = undefined
 
 anaA0 :: forall c {z} {t}.
          All c z =>
-         (forall s y {u}. (Plus (R '[s := u]) y z,
-                           R '[s := u] ~<~ z,
-                           y ~<~ z,
-                           c u) =>
-                           Proxy s -> u -> t) ->  -- Assuming I'll need proxies for same reason as below
-         V0 z -> t
+         (forall s y {u}. (Plus (R '[s := u]) y z, c u) =>
+                           Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
+      -> V0 z -> t
 anaA0 _ = undefined
 
 anaA1 :: forall c {z} {t} {u}.
          All c z =>
-         (forall s y {f}. (Plus (R '[s := f]) y z,
-                           R '[s := f] ~<~ z,
-                           y ~<~ z,
-                           c f) =>
-                           Proxy s -> f u -> t) ->   -- Proxy!? see `fmapV` below
-         V1 z u -> t
+         (forall s y {f}. (Plus (R '[s := f]) y z, c f)
+                        => Proxy s -> f u -> t) -- Proxy!? see `fmapV` below
+      ->
+          V1 z u -> t
 anaA1 _ = undefined
-
---
 
 showV :: forall z. All Show z => V0 z -> String
 showV = anaA0 @Show (const show)
@@ -205,11 +182,8 @@ showV1 = anaA0 @Show f where
 
 eqV :: forall z. All Eq z => V0 z -> V0 z -> Bool
 eqV v w = anaA0 @Eq g w where
-  g :: forall s y t. (Plus (R '[s := t]) y z,
-                      R '[s := t] ~<~ z,
-                      y ~<~ z,
-                      Eq t) =>
-                     Proxy s -> t -> Bool
+  g :: forall s y t. (Plus (R '[s := t]) y z, Eq t)
+                  =>  Proxy s -> t -> Bool
   g _ x = (case0 @s (\y -> x == y) `brn0` const False) v
 
 
@@ -221,15 +195,11 @@ fmapV f = anaA1 @Functor g where
 
   -- Can't get away without the type annotation here... even if I try to pattern
   -- match on the proxy.  Let's pretend I understand anything.
-  g :: forall s y f. (Plus (R '[s := f]) y z,
-                      R '[s := f] ~<~ z,
-                      y ~<~ z,
-                      Functor f) =>
-                     Proxy s -> f a -> V1 z b
+  g :: forall s y f. (Plus (R '[s := f]) y z, Functor f)
+                  => Proxy s -> f a -> V1 z b
   g _ x = con1 @s (fmap f x)
 
 -- This should be enough to do something dumb.  Let's try....
-
 data ZeroF k a = C0 k
   deriving Functor
 data OneF a    = C1 a
@@ -242,7 +212,7 @@ type BigR = R '["Const" := ZeroF Int, "Add" := TwoF, "Double" := OneF]
 type SmallR = R '["Const" := ZeroF Int, "Add" := TwoF]
 
 newtype Mu f = Wrap {unwrap :: f (Mu f)}
-
+{-
 -- Here's a very explicit type...
 desugar :: (-- These should all be solvable
             All Functor SmallR,
