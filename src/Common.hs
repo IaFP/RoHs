@@ -8,17 +8,12 @@ module Common where
 
 import GHC.Base
 
-data Row :: Type -> Type where
-  R :: [Assoc a] -> Row a
 
-data Assoc :: Type -> Type where
-  (:=) :: Symbol -> a -> Assoc a
+data Row :: Type -> Type
+type family R (a :: [Assoc t]) :: Row t
 
--- instance Eq (Assoc a) where
---   (s := _) == (s' := _) = sameSymbol s s'
-
--- instance Ord (Assoc a) where
---   (s := x) <= (s' := y) = s <= s'
+data Assoc :: Type -> Type
+type family (:=) (x :: Symbol) (y :: a) :: Assoc a
 
 class (~<~) (a :: Row t) (b :: Row t)
   -- probably shouldn't have user instances of this class... :P
@@ -34,7 +29,6 @@ class (x ~<~ z, y ~<~ z) => Plus (x :: Row t) (y :: Row t) (z :: Row t) | x y ->
 
 -- But if this is going to *actually* work, we're going to need to step in with
 -- some defaulting to actually fix `z`s.
-
 
 
 -- Records ahoy

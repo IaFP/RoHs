@@ -102,7 +102,8 @@ bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 bar1 :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["false" := Bool, "true" := Int]) =>
        -- This constraint should be solvable
        -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["false" := Bool, "true" := Int]) =>
-       (V0 (R '["true" := Int] ~+~ R '["false" := Bool])) -> Int
+       V0 (R '["true" := Int, "false" := Bool]) -> Int
+       -- (V0 (R '["true" := Int] ~+~ R '["false" := Bool])) -> Int
 bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
 -- This is a *less* compelling argument against than I thought, but still
@@ -122,10 +123,11 @@ bar2 :: forall z y1 y2.
         -- Bit of a run-around here because GHC doesn't like `z ~<~ x ~+~ y` constraints
         (Plus (R '["x" := Integer]) z y1,    -- `Integer` so defaulting doesn't get in the way
          Plus (R '["x" := Bool]) z y2
-         -- These three constraint should all be solvable, *given the definitions above*
-         -- R '["x" := Bool] ~<~ R '["x" := Bool],
-         -- R '["x" := Bool] ~<~ y2,
-         -- z ~<~ y2
+----   The below constraint set is too weak unfortunately. We have to use the Plus predicate
+        --  z ~<~ y1,
+        --  z ~<~ y1,
+        -- (R '["x" := Integer]) ~<~ y1,
+        -- (R '["x" := Bool]) ~<~ y2
         ) =>
         V0 y1 -> V0 y2
 bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
@@ -167,12 +169,12 @@ showV1 = anaA0 @Show f where
 -- But apparently adding the type signature will make `f` no longer have the
 -- right type.  I am concerned that I am missing something fundamental here...
 
---   f :: forall s y u. (Plus (R '[s := u]) y z,
---                       R '[s := u] ~<~ z,
---                       y ~<~ z,
---                       Show u) =>
---                       u -> String
---   f = show
+  -- f :: forall s y u. (Plus (R '[s := u]) y z,
+  --                     R '[s := u] ~<~ z,
+  --                     y ~<~ z,
+  --                     Show u) =>
+  --                     u -> String
+  -- f = show
 
 -- constants :: forall t z.
 --              (forall s f u z. R '[s := u] ~<~ z => R '[s := f u] ~<~ Each f z) =>

@@ -52,11 +52,11 @@ tcPlugin =
 -- Definitions used by the plugin.
 data PluginDefs =
   PluginDefs
-    { rowPlusTyCon     :: !API.TyCon -- standin for ~+~
+    { rowPlusTF     :: !API.TyCon -- standin for ~+~
     , rowLeqClass      :: !API.Class -- standin for ~<~
     , rowPlusCls       :: !API.Class -- standin for Plus
     , rowTyCon         :: !API.TyCon -- standin for Row
-    , rTyCon           :: !API.TyCon -- standin for R
+    , rTF           :: !API.TyCon -- standin for R
     , rowAssoc         :: !API.TyCon -- standin for :=
     , rowAssocTy       :: !API.TyCon -- standin for Assoc
 
@@ -78,17 +78,17 @@ tcPluginInit :: API.TcPluginM API.Init PluginDefs
 tcPluginInit = do
   API.tcPluginTrace "--Plugin Init--" empty
   commonModule   <- findCommonModule
-  rowPlusTyCon   <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "~+~")
-  rowLeqClass    <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "~<~")
   rowTyCon       <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Row")
-  rTyCon         <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc "R")
-  rowAssoc       <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc ":=")
+  rTF         <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "R")
+  rowAssoc       <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc ":=")
   rowAssocTy     <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Assoc")
+  rowPlusTF   <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "~+~")
+  rowLeqClass    <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "~<~")
   rowPlusCls     <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "Plus")
-  pure (PluginDefs { rowPlusTyCon
+  pure (PluginDefs { rowPlusTF
                    , rowLeqClass
                    , rowTyCon
-                   , rTyCon
+                   , rTF
                    , rowAssoc
                    , rowAssocTy
                    , rowPlusCls
@@ -105,8 +105,7 @@ tcPluginSolve defs givens wanteds = do
   -- (new_givens, new_wanteds) <- foldl ([], []) (convert_gs) givens
   pure $ API.TcPluginOk solved unsolved_wanteds
 
--- Converts a
--- convert_gs :: API.Ct -> ([(EvTerm, API.Ct)], [API.Ct])
+-- Converts a wanted to a solved if it is trivial
 solve_trivial :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve ([(API.EvTerm, API.Ct)], [API.Ct])
 solve_trivial PluginDefs{..} acc ct | predTy <- API.ctPred ct
                           , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
@@ -183,14 +182,14 @@ tcPluginStop _ = do
 
 -- We have to possibly rewrite ~+~ type family applications
 tcPluginRewrite :: PluginDefs -> API.UniqFM API.TyCon API.TcPluginRewriter
-tcPluginRewrite defs@(PluginDefs {rowPlusTyCon}) = API.listToUFM [ (rowPlusTyCon, rewrite_rowplus defs)
-                                                                         -- , (rTyCon, canonicalize_rowTy defs)
-                                                                         ]
+tcPluginRewrite defs@(PluginDefs {rowPlusTF, rTF}) = API.listToUFM [ (rowPlusTF, rewrite_rowplus defs)
+                                                                   , (rTF, canonicalize_rowTy defs)
+                                                                   ]
 
--- canonicalize_rowTy :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
--- canonicalize_rowTy (PluginDefs { .. }) givens tys
---   = do API.tcPluginTrace "--Plugin RowConcatRewrite rowTy--" (vcat [ ppr givens $$ ppr tys ])
---        pure API.TcPluginNoRewrite
+canonicalize_rowTy :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
+canonicalize_rowTy (PluginDefs { .. }) _givens tys
+  = do API.tcPluginTrace "--Plugin RowConcatRewrite R--" (vcat [ ppr rTF, ppr tys ])
+       pure API.TcPluginNoRewrite
 
 
 rewrite_rowplus :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
@@ -210,8 +209,8 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
                                                                   ]
                                                             )
             pure $ API.TcPluginRewriteTo
-                           (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal rowPlusTyCon [k, a, b]
-                               (API.mkTyConApp rTyCon [k, mkPromotedListTy rowAssocKi args]))
+                           (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal rowPlusTF [k, a, b]
+                               (API.mkTyConApp rTF [k, mkPromotedListTy rowAssocKi args]))
                            []
             -- pure API.TcPluginNoRewrite
       | otherwise
