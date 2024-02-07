@@ -2,7 +2,7 @@
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
-{-# OPTIONS -fplugin RoHsPlugin #-}
+{-# OPTIONS -fforce-recomp -fplugin RoHsPlugin #-}
 
 module Surface where
 
@@ -212,12 +212,7 @@ newtype Mu f = Wrap {unwrap :: f (Mu f)}
 type BigR = R '["Const" := ZeroF Int] ~+~  R '["Add" := TwoF] ~+~ R '["Double" := OneF]
 type SmallR = R '["Const" := ZeroF Int] ~+~ R '["Add" := TwoF]
 
--- Here's a very explicit type...
-desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
-desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
-  double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
-{-
--- Of course, I don't want to fix the entire row.
+
 desugar' :: forall bigr smallr.
            (-- These are essentially part of the type
             Plus (R '["Double" := OneF]) smallr bigr,
@@ -227,4 +222,12 @@ desugar' :: forall bigr smallr.
            Mu (V1 bigr) -> Mu (V1 smallr)
 desugar' (Wrap e) = Wrap ((double `brn1` (fmapV desugar' . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar' x) (desugar' x)))
+
+-- Here's a very explicit type...
+desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
+desugar = desugar'
+-- desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
+--   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
+{-
+-- Of course, I don't want to fix the entire row.
 -}

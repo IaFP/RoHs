@@ -49,6 +49,18 @@ tcPlugin =
     , API.tcPluginStop    = tcPluginStop
     }
 
+
+-- | PluginWork is a 2-tuple.
+--      1. The first component is a list of solved wanted constraints with evidence terms
+--      2. The second component is a list of residual constraints
+type PluginWork = ([(API.EvTerm, API.Ct)], [API.Ct])
+
+
+-- Merges the plugin work
+mergePluginWork :: PluginWork -> PluginWork -> PluginWork
+mergePluginWork (g_1s, w_1s) (g_2s, w_2s) = (g_1s ++ g_2s, w_1s ++ w_2s)
+
+
 -- Definitions used by the plugin.
 data PluginDefs =
   PluginDefs
@@ -132,7 +144,7 @@ tcPluginSolve defs givens wanteds = do
 --   0. Get all the trivial constraints out of the way by using solve_trivial
 --   1. Do a collective improvement where we use the set of givens and set of wanteds
 --   2. if we have made some progress go to step 0
-try_solving :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve ([(API.EvTerm, API.Ct)], [API.Ct])
+try_solving :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve PluginWork
 try_solving defs acc ct = do solve_trivial defs acc ct
 
 
@@ -142,7 +154,7 @@ try_solving defs acc ct = do solve_trivial defs acc ct
 --   Solving for things like: 1. Plus (x := t) (y := u) ((x := t) ~+~ (y := u)) etc
 --                            2. x ~<~ x
 --                            3. (x := t) ~<~ [x := t , y := u]
-solve_trivial :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve ([(API.EvTerm, API.Ct)], [API.Ct])
+solve_trivial :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve PluginWork
 solve_trivial PluginDefs{..} acc ct
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
@@ -160,21 +172,26 @@ solve_trivial PluginDefs{..} acc ct
                                                                                  , ppr x_s, ppr xs
                                                                                  , ppr y_s, ppr ys
                                                                                  , ppr z_s, ppr zs ])
-            ; return ([(mkIdFunEvTerm predTy, ct)], []) }
+            ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], []) }
     else do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
                                                                                  , ppr x_s, ppr xs
                                                                                  , ppr y_s, ppr ys
                                                                                  , ppr z_s, ppr zs ])
             ; return acc } -- no need to actually throw error.
                            -- it might fail down the tc pipleline anyway witha good error message
+
+
+
+  --  Handles the case of x ~<~ x
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowLeqCls
   , API.eqType x y -- if x ~<~ x definitely holds
   = do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" (vcat [ ppr clsCon
                                                                               , ppr x , ppr y ])
-       ; return ([(mkIdFunEvTerm predTy, ct)], []) }
+       ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], []) }
 
+  -- Handles the case of [(x := t)] ~<~ [(x := t), (y := u)]
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowLeqCls
