@@ -52,13 +52,16 @@ tcPlugin =
 -- Definitions used by the plugin.
 data PluginDefs =
   PluginDefs
-    { rowPlusTyCon     :: !API.TyCon -- standin for ~+~
-    , rowLeqCls        :: !API.Class -- standin for ~<~
-    , rowPlusCls       :: !API.Class -- standin for Plus
+    { rowPlusTF        :: !API.TyCon -- standin for ~+~
+    , allTF            :: !API.TyCon -- standin for All
     , rowTyCon         :: !API.TyCon -- standin for Row
     , rTyCon           :: !API.TyCon -- standin for R
     , rowAssoc         :: !API.TyCon -- standin for :=
     , rowAssocTy       :: !API.TyCon -- standin for Assoc
+
+    , rowLeqCls        :: !API.Class -- standin for ~<~
+    , rowPlusCls       :: !API.Class -- standin for Plus
+    , functorCls       :: !API.Class -- standin for Functor
     }
 
 
@@ -73,24 +76,44 @@ findCommonModule = do
     _                   -> error $ "RoHs.Plugin: could not find any module named RoHs.Common in the current package."
 
 
+
+findPreludeModule :: API.MonadTcPlugin m => m API.Module
+findPreludeModule = do
+  let modlName = API.mkModuleName "GHC.Base"
+  let pkgName = Just $ API.fsLit "base"
+  pkgQual    <- API.resolveImport      modlName pkgName
+  findResult <- API.findImportedModule modlName pkgQual
+  case findResult of
+    API.Found _ res     -> pure res
+    API.FoundMultiple _ -> error $ "RoHs.Plugin: found multiple modules named GHC.Base in the current package."
+    _                   -> error $ "RoHs.Plugin: could not find any module named GHC.Base in the current package."
+
+
 tcPluginInit :: API.TcPluginM API.Init PluginDefs
 tcPluginInit = do
   API.tcPluginTrace "--Plugin Init--" empty
   commonModule   <- findCommonModule
-  rowPlusTyCon   <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "~+~")
-  rowLeqCls      <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "~<~")
+  preludeModule  <- findPreludeModule
+
+  rowPlusTF      <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "~+~")
+  allTF          <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "All")
   rowTyCon       <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Row")
   rTyCon         <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc "R")
   rowAssoc       <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc ":=")
+  rowLeqCls      <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "~<~")
   rowAssocTy     <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Assoc")
   rowPlusCls     <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "Plus")
-  pure (PluginDefs { rowPlusTyCon
-                   , rowLeqCls
-                   , rowTyCon
-                   , rTyCon
-                   , rowAssoc
-                   , rowAssocTy
-                   , rowPlusCls
+  functorCls     <- API.tcLookupClass =<< API.lookupOrig preludeModule (API.mkClsOcc "Functor")
+
+  pure (PluginDefs { rowPlusTF = rowPlusTF
+                   , allTF = allTF
+                   , rowTyCon = rowTyCon
+                   , rTyCon = rTyCon
+                   , rowAssoc = rowAssoc
+                   , rowAssocTy = rowAssocTy
+                   , rowPlusCls = rowPlusCls
+                   , rowLeqCls = rowLeqCls
+                   , functorCls = functorCls
                    })
 
 -- The entry point for constraint solving
@@ -104,9 +127,12 @@ tcPluginSolve defs givens wanteds = do
   -- (new_givens, new_wanteds) <- foldl ([], []) (convert_gs) givens
   pure $ API.TcPluginOk solved unsolved_wanteds
 
--- | Solves simple wanteds like
---   Plus (x := t) (y := u) (x := t ~+~ y := u) etc
---
+-- | Solves simple wanteds.
+--   By simple i mean the ones that do not give rise to new wanted constraints
+--   They are the base cases of the proof generation, if you will
+--   Solving for things like: 1. Plus (x := t) (y := u) ((x := t) ~+~ (y := u)) etc
+--                            2. x ~<~ x
+--                            3. (x := t) ~<~ [x := t , y := u]
 -- convert_gs :: API.Ct -> ([(EvTerm, API.Ct)], [API.Ct])
 solve_trivial :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve ([(API.EvTerm, API.Ct)], [API.Ct])
 solve_trivial PluginDefs{..} acc ct
@@ -157,8 +183,10 @@ solve_trivial PluginDefs{..} acc ct
                                                          , ppr x_s, ppr xs
                                                          , ppr y_s, ppr ys])
             ; return acc } -- no need to actually throw error.
-                           -- it might fail down the tc pipleline anyway witha good error message
+                           -- it might fail down the tc pipleline anyway with a good error message
 
+
+  -- TODO | Each ?? is trivially solvable?
   | otherwise = return acc
 
 
@@ -220,22 +248,38 @@ tcPluginStop _ = do
 
 -- We have to possibly rewrite ~+~ type family applications
 tcPluginRewrite :: PluginDefs -> API.UniqFM API.TyCon API.TcPluginRewriter
-tcPluginRewrite defs@(PluginDefs {rowPlusTyCon}) = API.listToUFM [ (rowPlusTyCon, rewrite_rowplus defs)
+tcPluginRewrite defs@(PluginDefs {rowPlusTF, allTF}) = API.listToUFM [ (rowPlusTF, rewrite_rowplus defs)
                                                                    -- , (rTyCon, intercept_tyfam defs)
-                                                                 ]
+                                                                     , (allTF, rewrite_allTF defs)
+                                                                     ]
 
+-- | Template interceptor for a type family tycon
 -- intercept_tyfam :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
 -- intercept_tyfam (PluginDefs { .. }) givens tys
 --   = do API.tcPluginTrace "--Plugin RowConcatRewrite TF--" (vcat [ ppr givens $$ ppr tys ])
 --        pure API.TcPluginNoRewrite
 
 
--- canonicalize_rowTy :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
--- canonicalize_rowTy (PluginDefs { .. }) givens tys
---   = do API.tcPluginTrace "--Plugin RowConcatRewrite rowTy--" (vcat [ ppr givens $$ ppr tys ])
---        pure API.TcPluginNoRewrite
+-- | Constraints like All Functor (R [x := t]) should reduce to () as they are trivially satisfiable
+rewrite_allTF :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
+rewrite_allTF (PluginDefs { .. }) givens tys
+  | [_, clsTyCon, r] <- tys
+  , API.eqType clsTyCon (mkNakedTyConTy $ API.classTyCon functorCls)
+  , Just (rtc_mb, _) <- API.splitTyConApp_maybe r
+  , rtc_mb == rTyCon
+  -- TODO: and possibly check if the assocs are well formed?
+  = do API.tcPluginTrace "--Plugin All TF unit constraint--" (vcat [ ppr allTF, ppr tys, ppr givens ])
+       -- return a unit constraint?
+       pure $ API.TcPluginRewriteTo
+                           (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal allTF tys
+                               (mkConstraintTupleTy []))
+                           []
+  | otherwise
+  = do API.tcPluginTrace "--Plugin All TF--" (vcat [ ppr allTF, ppr tys, ppr givens ])
+       pure API.TcPluginNoRewrite
 
-
+-- | Reduce (x := t) ~+~ (y := u) to [x := t, y := u]
+--   The label occurance in the list is lexicographic.
 rewrite_rowplus :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
 rewrite_rowplus (PluginDefs { .. }) _givens tys
   | [k, a, b] <- tys
@@ -253,7 +297,7 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
                                                                   ]
                                                             )
             pure $ API.TcPluginRewriteTo
-                           (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal rowPlusTyCon [k, a, b]
+                           (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal rowPlusTF tys
                                (API.mkTyConApp rTyCon [k, mkPromotedListTy rowAssocKi concat_assocs]))
                            []
       | otherwise

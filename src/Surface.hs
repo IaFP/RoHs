@@ -213,10 +213,11 @@ type BigR = R '["Const" := ZeroF Int] ~+~  R '["Add" := TwoF] ~+~ R '["Double" :
 type SmallR = R '["Const" := ZeroF Int] ~+~ R '["Add" := TwoF]
 
 -- Here's a very explicit type...
-desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
+desugar :: (Plus (R '["Double" := OneF]) SmallR BigR)
+        => Mu (V1 BigR) -> Mu (V1 SmallR)
 desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
-
+{-
 -- Of course, I don't want to fix the entire row.
 desugar' :: forall bigr smallr.
            (-- These are essentially part of the type
@@ -227,3 +228,4 @@ desugar' :: forall bigr smallr.
            Mu (V1 bigr) -> Mu (V1 smallr)
 desugar' (Wrap e) = Wrap ((double `brn1` (fmapV desugar' . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar' x) (desugar' x)))
+-}

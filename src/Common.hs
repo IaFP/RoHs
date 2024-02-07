@@ -42,13 +42,13 @@ class (x ~<~ z, y ~<~ z) => Plus (x :: Row t) (y :: Row t) (z :: Row t)
 
 
 -- Records ahoy
-type family R0 :: Row Type -> Type -- how do the terms which inhabit this type look like
-type family R1 :: Row (a -> Type) -> a -> Type -- term level re
+type family R0 :: Row Type -> Type where -- how do the terms which inhabit this type look like
+type family R1 :: Row (a -> Type) -> a -> Type where -- term level re
 
 
 -- Let's repeat the tedium for variants...
-type family V0 :: Row Type -> Type
-type family V1 :: Row (a -> Type) -> a -> Type
+type family V0 :: Row Type -> Type where
+type family V1 :: Row (a -> Type) -> a -> Type where
 
 
 -- Okay, let's try Rω again.  Same fundamental problem: we need to replace the use of type-level λs.
@@ -61,4 +61,4 @@ type family Each :: (a -> b) -> Row a -> Row b where
   -- Perhaps I could solve this problem by switching `Each` to a constraint-with
   -- -fundep, but that seems hard to use...
 
-type family All :: (a -> Constraint) -> Row a -> Constraint where
+type family All (cls :: a -> Constraint) (r :: Row a) :: Constraint where
