@@ -123,17 +123,25 @@ tcPluginSolve _ givens [] = do -- simplify given constraints
   pure $ API.TcPluginOk [] []
 tcPluginSolve defs givens wanteds = do
   API.tcPluginTrace "--Plugin Solve--" (ppr givens $$ ppr wanteds)
-  (solved, unsolved_wanteds) <- foldlM (solve_trivial defs) ([], [])  wanteds
-  -- (new_givens, new_wanteds) <- foldl ([], []) (convert_gs) givens
-  pure $ API.TcPluginOk solved unsolved_wanteds
+  (solved, new_wanteds) <- foldlM (try_solving defs) ([], [])  wanteds
+  pure $ API.TcPluginOk solved new_wanteds
+
+
+-- | Try solving a given constraint
+--   What should be the strategy look like? Here's what i'm going to try and implement
+--   0. Get all the trivial constraints out of the way by using solve_trivial
+--   1. Do a collective improvement where we use the set of givens and set of wanteds
+--   2. if we have made some progress go to step 0
+try_solving :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve ([(API.EvTerm, API.Ct)], [API.Ct])
+try_solving defs acc ct = do solve_trivial defs acc ct
+
 
 -- | Solves simple wanteds.
---   By simple i mean the ones that do not give rise to new wanted constraints
+--   By simple I mean the ones that do not give rise to new wanted constraints
 --   They are the base cases of the proof generation, if you will
 --   Solving for things like: 1. Plus (x := t) (y := u) ((x := t) ~+~ (y := u)) etc
 --                            2. x ~<~ x
 --                            3. (x := t) ~<~ [x := t , y := u]
--- convert_gs :: API.Ct -> ([(EvTerm, API.Ct)], [API.Ct])
 solve_trivial :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve ([(API.EvTerm, API.Ct)], [API.Ct])
 solve_trivial PluginDefs{..} acc ct
   | predTy <- API.ctPred ct
@@ -164,7 +172,7 @@ solve_trivial PluginDefs{..} acc ct
   , clsCon == API.classTyCon rowLeqCls
   , API.eqType x y -- if x ~<~ x definitely holds
   = do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" (vcat [ ppr clsCon
-                                                         , ppr x , ppr y ])
+                                                                              , ppr x , ppr y ])
        ; return ([(mkIdFunEvTerm predTy, ct)], []) }
 
   | predTy <- API.ctPred ct
@@ -182,7 +190,7 @@ solve_trivial PluginDefs{..} acc ct
     else do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
                                                          , ppr x_s, ppr xs
                                                          , ppr y_s, ppr ys])
-            ; return acc } -- no need to actually throw error.
+            ; return acc } -- no need to actually throw error here
                            -- it might fail down the tc pipleline anyway with a good error message
 
 
