@@ -91,18 +91,10 @@ case1 f = f . unlabV1
 
 --
 
-bar :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["true" := Int, "false" := Bool]) =>
-       -- This constraint should be solvable
-       -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["true" := Int, "false" := Bool]) =>
-       -- V0 (R '["true" := Int, "false" := Bool]) -> Int -- This order shouldn't matter, but I don't know how to
-       -- make "alpha"-equivalence work for row types yet.
-       (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
+bar :: (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
 bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
-bar1 :: -- (R '["true" := Int] ~+~ R '["false" := Bool] ~ R '["false" := Bool, "true" := Int]) =>
-       -- This constraint should be solvable
-       -- Plus (R '["true" := Int]) (R '["false" := Bool]) (R '["false" := Bool, "true" := Int]) =>
-       (V0 (R '["false" := Bool] ~+~ R '["true" := Int])) -> Int
+bar1 ::(V0 (R '["false" := Bool] ~+~ R '["true" := Int])) -> Int
 bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
 -- This is a *less* compelling argument against than I thought, but still
@@ -121,12 +113,7 @@ bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 bar2 :: forall z y1 y2.
         -- Bit of a run-around here because GHC doesn't like `z ~<~ x ~+~ y` constraints
         (Plus (R '["x" := Integer]) z y1,    -- `Integer` so defaulting doesn't get in the way
-         Plus (R '["x" := Bool]) z y2
-         -- These three constraint should all be solvable, *given the definitions above*
-         -- R '["x" := Bool] ~<~ R '["x" := Bool],
-         -- R '["x" := Bool] ~<~ y2,
-         -- z ~<~ y2
-        ) =>
+         Plus (R '["x" := Bool]) z y2) =>
         V0 y1 -> V0 y2
 bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
   where zero :: Integer = 0
@@ -153,8 +140,7 @@ anaA1 :: forall c {z} {t} {u}.
          All c z =>
          (forall s y {f}. (Plus (R '[s := f]) y z, c f)
                         => Proxy s -> f u -> t) -- Proxy!? see `fmapV` below
-      ->
-          V1 z u -> t
+      -> V1 z u -> t
 anaA1 _ = undefined
 
 showV :: forall z. All Show z => V0 z -> String
@@ -225,9 +211,6 @@ desugar' (Wrap e) = Wrap ((double `brn1` (fmapV desugar' . inj1)) e) where
 
 -- Here's a very explicit type...
 desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
-desugar = desugar'
--- desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
---   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
-{-
--- Of course, I don't want to fix the entire row.
--}
+-- desugar = desugar'
+desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
+  double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
