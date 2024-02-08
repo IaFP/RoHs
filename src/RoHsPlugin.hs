@@ -12,6 +12,7 @@ import GHC.Utils.Outputable
 
 -- ghc-tcplugin-api
 import qualified GHC.TcPlugin.API as API
+import qualified GHC.TcPluginM.Extra as API
 import GHC.Core.TyCo.Rep
 -- import GHC.TcPlugin.API ( TcPluginErrorMessage(..) )
 import GHC.Core
@@ -53,14 +54,14 @@ tcPlugin =
 
 
 -- | PluginWork is a 2-tuple.
---      1. The first component is a list of solved wanted constraints with evidence terms
---      2. The second component is a list of residual constraints
-type PluginWork = ([(API.EvTerm, API.Ct)], [API.Ct])
-
+type PluginWork = ([(API.EvTerm, API.Ct)] -- solved things
+                  , [API.Ct]   -- new wanteds
+                  , [(API.TcTyVar, API.TcType)] -- discovered equalties which will be applied to the residual unsolveds as improvements
+                  )
 
 -- Merges the plugin work
 mergePluginWork :: PluginWork -> PluginWork -> PluginWork
-mergePluginWork (g_1s, w_1s) (g_2s, w_2s) = (g_1s ++ g_2s, w_1s ++ w_2s)
+mergePluginWork (g_1s, w_1s, eqs1s) (g_2s, w_2s, eqs2s) = (g_1s ++ g_2s, w_1s ++ w_2s, eqs1s ++ eqs2s)
 
 
 -- Definitions used by the plugin.
@@ -136,9 +137,13 @@ tcPluginSolve _ givens [] = do -- simplify given constraints
   API.tcPluginTrace "--Plugin Solve Givens--" (ppr givens)
   pure $ API.TcPluginOk [] []
 tcPluginSolve defs givens wanteds = do
-  API.tcPluginTrace "--Plugin Solve Wanteds--" (ppr givens $$ ppr wanteds)
-  (solved, new_wanteds) <- foldlM (try_solving defs) ([], [])  wanteds
-  pure $ API.TcPluginOk solved new_wanteds
+  API.tcPluginTrace "--Plugin Solve Wanteds start--" (ppr givens $$ ppr wanteds)
+  (solved, _, _) <- try_solving defs ([], [], []) wanteds
+  API.tcPluginTrace "--Plugin Solve Wanteds Done--" (vcat [ ppr wanteds
+                                                          , text "---------------"
+                                                          , ppr solved
+                                                          ])
+  pure $ API.TcPluginOk solved [] -- we never emit new wanteds
 
 
 -- | Try solving a given constraint
@@ -146,9 +151,15 @@ tcPluginSolve defs givens wanteds = do
 --   0. Get all the trivial constraints out of the way by using solve_trivial
 --   1. Do a collective improvement where we use the set of givens and set of wanteds
 --   2. if we have made some progress go to step 0
-try_solving :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve PluginWork
-try_solving defs acc ct = do solve_trivial defs acc ct
-
+try_solving :: PluginDefs -> PluginWork -> [API.Ct] -> API.TcPluginM API.Solve PluginWork
+try_solving defs acc wanteds = do (solved, unsolveds, equalities) <- foldlM (solve_trivial defs) acc wanteds
+                                  -- let improved_unsolved = fmap (API.substCt equalities) unsolveds
+                                  API.tcPluginTrace "--Plugin Solve improvements--" (vcat [ ppr unsolveds
+                                                                                          , ppr equalities
+                                                                                           ])
+                                  -- lets see if this works we can then put it in a loop if needed
+                                  (solved', _, _) <- foldlM (solve_trivial defs) ([], [], equalities) unsolveds
+                                  return (solved ++ solved', []{- Ignored field -}, [] {- ignored field-})
 
 -- | Solves simple wanteds.
 --   By simple I mean the ones that do not give rise to new wanted constraints
@@ -156,8 +167,8 @@ try_solving defs acc ct = do solve_trivial defs acc ct
 --   Solving for things like: 1. Plus (x := t) (y := u) ((x := t) ~+~ (y := u)) etc
 --                            2. x ~<~ x
 --                            3. (x := t) ~<~ [x := t , y := u]
-solve_trivial :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.TcPluginM API.Solve PluginWork
-solve_trivial PluginDefs{..} acc ct
+solve_trivial :: PluginDefs -> PluginWork -> API.Ct -> API.TcPluginM API.Solve PluginWork
+solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowPlusCls
@@ -174,42 +185,40 @@ solve_trivial PluginDefs{..} acc ct
                                                                                  , ppr x_s, ppr xs
                                                                                  , ppr y_s, ppr ys
                                                                                  , ppr z_s, ppr zs ])
-            ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], []) }
+            ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], []) }
     else do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
                                                                                  , ppr x_s, ppr xs
                                                                                  , ppr y_s, ppr ys
                                                                                  , ppr z_s, ppr zs ])
-            ; return acc } -- no need to actually throw error.
+            ; return $ mergePluginWork acc ([], [ct], [])} -- no need to actually throw error.
                            -- it might fail down the tc pipleline anyway witha good error message
 
+  -- handles the case such where we have [W] Plus ([x := t]) (y0) ([x := t, y := u])
+  -- due to functional dependency we _know_ that y0 is unique we can
+  -- then emit that Plus is solvable, and (y0 ~ y := u)
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowPlusCls
-  , Just (_r_tycon1, [k, assocs_x])<- API.splitTyConApp_maybe x
-  , Just (_r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
+  , Just (r_tycon, [k, assocs_x])<- API.splitTyConApp_maybe x
+  , Just (_, [_, assocs_z])<- API.splitTyConApp_maybe z
   , let xs = sortAssocs $ unfold_list_type_elems assocs_x
   , let zs = sortAssocs $ unfold_list_type_elems assocs_z
+  , Just yTVar <- getTyVar_maybe y
   -- y is just a type variable which we will solve for
-  = do { API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
-                                                                                    , ppr x , ppr y, ppr z ])
+  = do { API.tcPluginTrace "--Plugin solving improvement for Plus with Eq emit --" (vcat [ ppr predTy ])
        ; if (checkSubset xs zs)
-         then do { let ys = setDiff xs zs
-                       y0 = API.mkTyConApp _r_tycon1 [k,  mkPromotedListTy (mkTyConTy rowAssocTy) ys]
-                 ; let co = mkCoercion API.Nominal y y0
-                       coTy = mkCoercionTy co
-                       evLoc = API.ctLoc ct
-                 ; evVar <- API.newEvVar coTy
-                 ; let new_EqCt = head $ mkGivens evLoc [evVar]
+         then do { let ys = sortAssocs $ setDiff xs zs
+                       y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy (mkTyConTy rowAssocTy) ys]
                  ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
-                                                                                              , ppr x , ppr z
+                                                                                              , ppr x, ppr z, ppr y, ppr ys
                                                                                               , text "computed" <+> ppr y0
-                                                                                              , ppr new_EqCt])
+                                                                                              ])
 
-                 ; return $ mergePluginWork acc ([ (mkIdFunEvTerm predTy, ct)
-                                                 , (mkIdFunEvTerm coTy, new_EqCt) -- will this work?
-                                                 ]
-                                                 , []) }
-         else return acc
+                 ; return $ mergePluginWork acc ([ (mkIdFunEvTerm predTy, ct) ]
+                                                 , [] -- no new wanteds
+                                                 , [(yTVar, y0)] -- new equalilites
+                                                 ) }
+         else return $ mergePluginWork acc ([], [ct], [])
        }
 
 
@@ -220,7 +229,7 @@ solve_trivial PluginDefs{..} acc ct
   , API.eqType x y -- if x ~<~ x definitely holds
   = do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--" (vcat [ ppr clsCon
                                                                               , ppr x , ppr y ])
-       ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], []) }
+       ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], []) }
 
   -- Handles the case of [(x := t)] ~<~ [(x := t), (y := u)]
   | predTy <- API.ctPred ct
@@ -234,33 +243,54 @@ solve_trivial PluginDefs{..} acc ct
     then do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--" (vcat [ ppr clsCon
                                                          , ppr x_s, ppr xs
                                                          , ppr y_s, ppr ys ])
-            ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], []) }
-    else do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
+            ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], []) }
+    else do { API.tcPluginTrace "--Plugin solving ~<~ unsolved--"  (vcat [ ppr clsCon
                                                          , ppr x_s, ppr xs
                                                          , ppr y_s, ppr ys])
-            ; return acc } -- no need to actually throw error here
+            ; return $ mergePluginWork acc ([], [ct], []) } -- no need to actually throw error here
                            -- it might fail down the tc pipleline anyway with a good error message
 
+  --  Handles the case of x ~<~ y with additional equality condition that x ~ y
+  | predTy <- API.ctPred ct
+  , Just (clsCon, ([_, x, y])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowLeqCls
+  , not (null eqs)
+  = do { let s = mkTvSubstPrs eqs
+             x' = substTy s x
+             test = API.eqType x' y
+       ; API.tcPluginTrace "--Plugin solving ~<~ construct evidence with eqs--" (vcat [ ppr test, ppr clsCon, ppr eqs
+                                                                                      , ppr x , ppr y, ppr (substTys s [x,y])
+                                                                                      ])
 
-  -- TODO | Each ?? is trivially solvable?
-  | otherwise = return acc
+       ; if test then return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], [])
+                 else return $ acc
+       }
+
+
+  | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches" (ppr acc)
+                   return acc
+
 
 {-
+I hope that i don't have to make pairwise improvements; it will be painful.
+
+-- improveCts :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> [API.Ct] -> [API.Ct] -> API.TcPluginM API.Solve PluginWork
+
 -- This is usually pairwise improvement of the constraints
 solve_improvement :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.Ct -> API.TcPluginM API.Solve PluginWork
 solve_improvement PluginDefs{..} acc ct1 ct2
-  -- handles the case such as Plus ([x := t]) (y0) ([x := t, y := u])
+  -- handles the case such where we have [W] Plus ([x := t]) (y0) ([x := t, y := u])
+  --                                     [W] y0 ~<~ ([x := t, y := u])
   -- then it will emit that Plus is solvable, and (y0 ~ y := u)
-  | predTy1 <- API.ctPred ct1
+  | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowPlusCls
-  , Just (_r_tycon1, [k, assocs_x])<- API.splitTyConApp_maybe x
-  , Just (_r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
+  , Just (_r_tycon, [k, assocs_x])<- API.splitTyConApp_maybe x
+  , Just (_, [_, assocs_z])<- API.splitTyConApp_maybe z
   , let xs = sortAssocs $ unfold_list_type_elems assocs_x
   , let zs = sortAssocs $ unfold_list_type_elems assocs_z
   -- y is just a type variable which we will solve for
-  = do { API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
-                                                                                    , ppr x , ppr y, ppr z ])
+  = do { API.tcPluginTrace "--Plugin solving improvement for Plus & ~<~ --" (vcat [ ppr predTy ])
        ; if (checkSubset xs zs)
          then do { let ys = setDiff xs zs
                        y0 = API.mkTyConApp _r_tycon1 [k,  mkPromotedListTy (mkTyConTy rowAssocTy) ys]
@@ -270,14 +300,14 @@ solve_improvement PluginDefs{..} acc ct1 ct2
                  ; evVar <- API.newEvVar coTy
                  ; let new_EqCt = head $ mkGivens evLoc [evVar]
                  ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
-                                                                                              , ppr x , ppr z
+                                                                                              , ppr x, ppr z
                                                                                               , text "computed" <+> ppr y0
                                                                                               , ppr new_EqCt])
 
-                 ; return $ mergePluginWork acc ([ (mkIdFunEvTerm predTy, ct)
-                                                 , (mkIdFunEvTerm coTy, new_EqCt) -- will this work?
+                 ; return $ mergePluginWork acc ([ (mkIdFunEvTerm predTy1, ct1)
+                                                 , (mkIdFunEvTerm coTy, ct2) -- will this work?
                                                  ]
-                                                 , []) }
+                                                 , [{- substCt -}]) }
          else return acc
        }
 
@@ -290,9 +320,9 @@ solve_improvement PluginDefs{..} acc ct1 ct2
   -- , Just x_s@(_r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
   -- , Just y_s@(_r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
   -- , Just z_s@(_r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
+
+  | otherwise = return acc
 -}
-
-
 
 
 -- Some constraint solving just results to having identity functions as evidence
