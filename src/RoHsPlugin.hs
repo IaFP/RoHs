@@ -27,6 +27,8 @@ import GHC.Types.Unique
 import GHC.Types.SrcLoc
 import GHC.Builtin.Types
 
+import GHC.Tc.Types.Constraint
+
 -- TODOs: The plugin should enable replacing class Common.Plus with Common.(~+~)
 
 -- The point of this exercise it to show that the GHCs injective type families (implementation, the very least)
@@ -131,10 +133,10 @@ tcPluginInit = do
 -- The entry point for constraint solving
 tcPluginSolve :: PluginDefs -> [ API.Ct ] -> [ API.Ct ] -> API.TcPluginM API.Solve API.TcPluginSolveResult
 tcPluginSolve _ givens [] = do -- simplify given constraints
-  API.tcPluginTrace "--Plugin Solve Simplify--" (ppr givens)
+  API.tcPluginTrace "--Plugin Solve Givens--" (ppr givens)
   pure $ API.TcPluginOk [] []
 tcPluginSolve defs givens wanteds = do
-  API.tcPluginTrace "--Plugin Solve--" (ppr givens $$ ppr wanteds)
+  API.tcPluginTrace "--Plugin Solve Wanteds--" (ppr givens $$ ppr wanteds)
   (solved, new_wanteds) <- foldlM (try_solving defs) ([], [])  wanteds
   pure $ API.TcPluginOk solved new_wanteds
 
@@ -162,9 +164,9 @@ solve_trivial PluginDefs{..} acc ct
   , Just x_s@(_r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
   , Just y_s@(_r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
   , Just z_s@(_r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
-  , let xs = sortAssocs $ fold_list_type_elems assocs_x
-  , let ys = sortAssocs $ fold_list_type_elems assocs_y
-  , let zs = sortAssocs $ fold_list_type_elems assocs_z
+  , let xs = sortAssocs $ unfold_list_type_elems assocs_x
+  , let ys = sortAssocs $ unfold_list_type_elems assocs_y
+  , let zs = sortAssocs $ unfold_list_type_elems assocs_z
   , let args = sortAssocs $ xs ++ ys
   = if (length args == length zs)
            && all (\(l, r) -> API.eqType l r) (zip args (init zs))
@@ -180,6 +182,35 @@ solve_trivial PluginDefs{..} acc ct
             ; return acc } -- no need to actually throw error.
                            -- it might fail down the tc pipleline anyway witha good error message
 
+  | predTy <- API.ctPred ct
+  , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowPlusCls
+  , Just (_r_tycon1, [k, assocs_x])<- API.splitTyConApp_maybe x
+  , Just (_r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
+  , let xs = sortAssocs $ unfold_list_type_elems assocs_x
+  , let zs = sortAssocs $ unfold_list_type_elems assocs_z
+  -- y is just a type variable which we will solve for
+  = do { API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
+                                                                                    , ppr x , ppr y, ppr z ])
+       ; if (checkSubset xs zs)
+         then do { let ys = setDiff xs zs
+                       y0 = API.mkTyConApp _r_tycon1 [k,  mkPromotedListTy (mkTyConTy rowAssocTy) ys]
+                 ; let co = mkCoercion API.Nominal y y0
+                       coTy = mkCoercionTy co
+                       evLoc = API.ctLoc ct
+                 ; evVar <- API.newEvVar coTy
+                 ; let new_EqCt = head $ mkGivens evLoc [evVar]
+                 ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
+                                                                                              , ppr x , ppr z
+                                                                                              , text "computed" <+> ppr y0
+                                                                                              , ppr new_EqCt])
+
+                 ; return $ mergePluginWork acc ([ (mkIdFunEvTerm predTy, ct)
+                                                 , (mkIdFunEvTerm coTy, new_EqCt) -- will this work?
+                                                 ]
+                                                 , []) }
+         else return acc
+       }
 
 
   --  Handles the case of x ~<~ x
@@ -187,7 +218,7 @@ solve_trivial PluginDefs{..} acc ct
   , Just (clsCon, ([_, x, y])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowLeqCls
   , API.eqType x y -- if x ~<~ x definitely holds
-  = do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" (vcat [ ppr clsCon
+  = do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--" (vcat [ ppr clsCon
                                                                               , ppr x , ppr y ])
        ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], []) }
 
@@ -197,13 +228,13 @@ solve_trivial PluginDefs{..} acc ct
   , clsCon == API.classTyCon rowLeqCls
   , Just x_s@(_r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
   , Just y_s@(_r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
-  , let xs = sortAssocs $ fold_list_type_elems assocs_x
-  , let ys = sortAssocs $ fold_list_type_elems assocs_y
+  , let xs = sortAssocs $ unfold_list_type_elems assocs_x
+  , let ys = sortAssocs $ unfold_list_type_elems assocs_y
   = if (checkMembership xs ys)
-    then do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" (vcat [ ppr clsCon
+    then do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--" (vcat [ ppr clsCon
                                                          , ppr x_s, ppr xs
                                                          , ppr y_s, ppr ys ])
-            ; return ([(mkIdFunEvTerm predTy, ct)], []) }
+            ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], []) }
     else do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
                                                          , ppr x_s, ppr xs
                                                          , ppr y_s, ppr ys])
@@ -214,11 +245,55 @@ solve_trivial PluginDefs{..} acc ct
   -- TODO | Each ?? is trivially solvable?
   | otherwise = return acc
 
+{-
+-- This is usually pairwise improvement of the constraints
+solve_improvement :: PluginDefs -> ([(API.EvTerm, API.Ct)], [API.Ct]) -> API.Ct -> API.Ct -> API.TcPluginM API.Solve PluginWork
+solve_improvement PluginDefs{..} acc ct1 ct2
+  -- handles the case such as Plus ([x := t]) (y0) ([x := t, y := u])
+  -- then it will emit that Plus is solvable, and (y0 ~ y := u)
+  | predTy1 <- API.ctPred ct1
+  , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowPlusCls
+  , Just (_r_tycon1, [k, assocs_x])<- API.splitTyConApp_maybe x
+  , Just (_r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
+  , let xs = sortAssocs $ unfold_list_type_elems assocs_x
+  , let zs = sortAssocs $ unfold_list_type_elems assocs_z
+  -- y is just a type variable which we will solve for
+  = do { API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
+                                                                                    , ppr x , ppr y, ppr z ])
+       ; if (checkSubset xs zs)
+         then do { let ys = setDiff xs zs
+                       y0 = API.mkTyConApp _r_tycon1 [k,  mkPromotedListTy (mkTyConTy rowAssocTy) ys]
+                 ; let co = mkCoercion API.Nominal y y0
+                       coTy = mkCoercionTy co
+                       evLoc = API.ctLoc ct
+                 ; evVar <- API.newEvVar coTy
+                 ; let new_EqCt = head $ mkGivens evLoc [evVar]
+                 ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
+                                                                                              , ppr x , ppr z
+                                                                                              , text "computed" <+> ppr y0
+                                                                                              , ppr new_EqCt])
 
-checkMembership :: [Type] -> [Type] -> Bool
-checkMembership [] _         =  True
-checkMembership _  []        =  False
-checkMembership (x:xs) (y:ys)=  (x `eqAssoc` y == EQ) && checkMembership xs ys
+                 ; return $ mergePluginWork acc ([ (mkIdFunEvTerm predTy, ct)
+                                                 , (mkIdFunEvTerm coTy, new_EqCt) -- will this work?
+                                                 ]
+                                                 , []) }
+         else return acc
+       }
+
+  -- handles the case such as Plus x0 (y := u) ([x := t, y := u])
+  -- then it will emit that Plus is solvable, and (x0 ~ x := t)
+
+  -- | predTy <- API.ctPred ct
+  -- , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
+  -- , clsCon == API.classTyCon rowPlusCls
+  -- , Just x_s@(_r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
+  -- , Just y_s@(_r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
+  -- , Just z_s@(_r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
+-}
+
+
+
 
 -- Some constraint solving just results to having identity functions as evidence
 mkIdFunEvTerm :: Type -> API.EvTerm
@@ -252,8 +327,8 @@ mkCoercion :: API.Role -> Type -> Type -> Coercion
 mkCoercion = API.mkPluginUnivCo "Proven by Le RoHsPlugin"
 
 -- If you get a list of assocs, flatten it out
-fold_list_type_elems :: API.TcType -> [API.TcType]
-fold_list_type_elems =  go []
+unfold_list_type_elems :: API.TcType -> [API.TcType]
+unfold_list_type_elems =  go []
   where
     go :: [API.TcType] -> API.TcType -> [API.TcType]
     go acc ty | Nothing <- API.splitTyConApp_maybe ty
@@ -311,8 +386,8 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
   = if
       | Just (_ , [_, arg_a]) <- API.splitTyConApp_maybe a
       , Just (_ , [_, arg_b]) <- API.splitTyConApp_maybe b
-      , assocs_a <- fold_list_type_elems arg_a
-      , assocs_b <- fold_list_type_elems arg_b
+      , assocs_a <- unfold_list_type_elems arg_a
+      , assocs_b <- unfold_list_type_elems arg_b
       , let concat_assocs = sortAssocs $ assocs_a ++ assocs_b
             rowAssocKi = head assocs_a
       -> do API.tcPluginTrace "--Plugin RowConcatRewrite (~+~)--" (vcat [ text "args_a:" <+> ppr assocs_a
@@ -331,6 +406,33 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
   = do API.tcPluginTrace "other tyfam" (ppr tys)
        pure API.TcPluginNoRewrite
 
+
+
+
+---- The worlds most efficient set operations below ---
+-- Precondition for each of the operations below is that they should be Assocs
+-- They will not work as expected for non-Assoc types
+
+-- | Checks if the first argument is a prefix of the second argument
+checkMembership :: [Type] -> [Type] -> Bool
+checkMembership [] _         =  True
+checkMembership _  []        =  False
+checkMembership (x:xs) (y:ys)=  (x `eqAssoc` y == EQ) && checkMembership xs ys
+
+-- | Checks if the first argument is a subset of the second argument
+checkSubset  :: [Type] -> [Type] -> Bool
+checkSubset  [] _ = True
+checkSubset (x:xs) ys = (any (API.eqType x) ys) && checkSubset xs ys
+
+-- | computes for set difference
+--   setDiff xs ys = { z  | z in ys && z not in xs }
+setDiff :: [Type] -> [Type] -> [Type]
+setDiff xs ys = setDiff_inner [] xs ys
+  where
+    setDiff_inner acc _ [] = acc
+    setDiff_inner acc xs' (y : ys') | any (API.eqType y) xs' = setDiff_inner acc xs' ys'
+                                    | otherwise = setDiff_inner (y:acc) xs' ys'
+
 -- At this point i'm just sorting on the kind of the type which happens to be a string literal, Sigh ...
 cmpAssoc :: API.TcType -> API.TcType -> Ordering
 cmpAssoc lty rty | Just (_, [_, LitTy lbl_l, _]) <- API.splitTyConApp_maybe lty
@@ -348,6 +450,8 @@ eqAssoc _ _ = GT
 -- This is the "cannonical/principal" type representation of a row type
 sortAssocs :: [API.TcType] -> [API.TcType]
 sortAssocs = sortBy cmpAssoc
+
+---- The worlds most efficient set operations above -----
 
 
 -- Return the given type family reduction, while emitting an additional type error with the given message.

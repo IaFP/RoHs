@@ -32,7 +32,7 @@ type family (~+~) (a :: Row t) (b :: Row t) = (c :: Row t)
 -- progress using the following definition:
 
 class (x ~<~ z, y ~<~ z) => Plus (x :: Row t) (y :: Row t) (z :: Row t)
-   | -- x y -> z, -- Does Plus x y (x ~+~ y) ~ Plus x y (y ~+~ x)? the types are checked nominally for equality. and this one violates the functional dependency
+   | x y -> z, -- Does Plus x y (x ~+~ y) ~ Plus x y (y ~+~ x)? the types are checked nominally for equality. and this one violates the functional dependency
     x z -> y,
     y z -> x
 
