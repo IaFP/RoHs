@@ -153,13 +153,20 @@ main_solver defs _ wanteds = do (s, _, _) <- try_solving defs ([], [], []) wante
 --       1. Do a collective improvement where we use the set of givens and set of wanteds
 --       2. if we have made some progress go to step 0
 try_solving :: PluginDefs -> PluginWork -> [API.Ct] -> API.TcPluginM API.Solve PluginWork
-try_solving defs acc wanteds = do (solved, unsolveds, equalities) <- foldlM (solve_trivial defs) acc wanteds
-                                  API.tcPluginTrace "--Plugin Solve improvements--" (vcat [ ppr unsolveds
-                                                                                          , ppr equalities
-                                                                                           ])
-                                  -- lets see if this works we can then put it in a loop if needed
-                                  (solved', _, _) <- foldlM (solve_trivial defs) ([], [], equalities) unsolveds
-                                  return (solved ++ solved', []{- Ignored field -}, [] {- ignored field-})
+try_solving defs acc@(solved, unsolveds, equalities) wanteds =
+  do acc'@(solved', _, equalities') <- foldlM (solve_trivial defs) acc wanteds
+     API.tcPluginTrace "--Plugin Solve improvements--" (vcat [ ppr unsolveds
+                                                             , ppr equalities
+                                                             ])
+     if madeProgress (solved, solved') (equalities, equalities')
+     then foldlM (solve_trivial defs) acc' unsolveds
+     else return acc
+
+        -- we only make progress when we either solve more things, or we make more equalities.
+        -- the first condition is obviously progress,
+        -- the second one can enable more solving as
+        -- we have discovered equalities that previously we did not know about
+  where madeProgress (s, s') (e, e') = length s' > length s || length e' > length e
 
 -- | Solves simple wanteds.
 --   By simple I mean the ones that do not give rise to new wanted constraints
@@ -440,9 +447,8 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
        pure API.TcPluginNoRewrite
 
 
-
-
 ---- The worlds most efficient set operations below ---
+
 -- Precondition for each of the operations below is that they should be Assocs
 -- They will not work as expected for non-Assoc types
 
