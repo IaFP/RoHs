@@ -12,7 +12,6 @@ import GHC.Utils.Outputable
 
 -- ghc-tcplugin-api
 import qualified GHC.TcPlugin.API as API
-import qualified GHC.TcPluginM.Extra as API
 import GHC.Core.TyCo.Rep
 -- import GHC.TcPlugin.API ( TcPluginErrorMessage(..) )
 import GHC.Core
@@ -28,12 +27,10 @@ import GHC.Types.Unique
 import GHC.Types.SrcLoc
 import GHC.Builtin.Types
 
-import GHC.Tc.Types.Constraint
-
 -- TODOs: The plugin should enable replacing class Common.Plus with Common.(~+~)
 
 -- The point of this exercise it to show that the GHCs injective type families (implementation, the very least)
--- not as expressive as it should be.API
+-- not as expressive as it should be
 -- `Plus x y z` also has an associated evidence that says how z is formed using x and y
 -- If we use x ~+~ y, then we are potentially losing that information. (but do we really need it)
 
@@ -72,7 +69,7 @@ data PluginDefs =
     , rowTyCon         :: !API.TyCon -- standin for Row
     , rTyCon           :: !API.TyCon -- standin for R
     , rowAssoc         :: !API.TyCon -- standin for :=
-    , rowAssocTy       :: !API.TyCon -- standin for Assoc
+    , rowAssocTyCon    :: !API.TyCon -- standin for Assoc
 
     , rowLeqCls        :: !API.Class -- standin for ~<~
     , rowPlusCls       :: !API.Class -- standin for Plus
@@ -116,19 +113,20 @@ tcPluginInit = do
   rTyCon         <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc "R")
   rowAssoc       <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc ":=")
   rowLeqCls      <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "~<~")
-  rowAssocTy     <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Assoc")
+  rowAssocTyCon  <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Assoc")
   rowPlusCls     <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "Plus")
   functorCls     <- API.tcLookupClass =<< API.lookupOrig preludeModule (API.mkClsOcc "Functor")
 
-  pure (PluginDefs { rowPlusTF = rowPlusTF
-                   , allTF = allTF
-                   , rowTyCon = rowTyCon
-                   , rTyCon = rTyCon
-                   , rowAssoc = rowAssoc
-                   , rowAssocTy = rowAssocTy
-                   , rowPlusCls = rowPlusCls
-                   , rowLeqCls = rowLeqCls
-                   , functorCls = functorCls
+  pure (PluginDefs { rowPlusTF     = rowPlusTF
+                   , allTF         = allTF
+                   , rowTyCon      = rowTyCon
+                   , rTyCon        = rTyCon
+                   , rowAssoc      = rowAssoc
+                   , rowAssocTyCon = rowAssocTyCon
+
+                   , rowPlusCls    = rowPlusCls
+                   , rowLeqCls     = rowLeqCls
+                   , functorCls    = functorCls
                    })
 
 -- The entry point for constraint solving
@@ -156,7 +154,6 @@ main_solver defs _ wanteds = do (s, _, _) <- try_solving defs ([], [], []) wante
 --       2. if we have made some progress go to step 0
 try_solving :: PluginDefs -> PluginWork -> [API.Ct] -> API.TcPluginM API.Solve PluginWork
 try_solving defs acc wanteds = do (solved, unsolveds, equalities) <- foldlM (solve_trivial defs) acc wanteds
-                                  -- let improved_unsolved = fmap (API.substCt equalities) unsolveds
                                   API.tcPluginTrace "--Plugin Solve improvements--" (vcat [ ppr unsolveds
                                                                                           , ppr equalities
                                                                                            ])
@@ -211,7 +208,8 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   = do { API.tcPluginTrace "--Plugin solving improvement for Plus with Eq emit --" (vcat [ ppr predTy ])
        ; if (checkSubset xs zs)
          then do { let ys = sortAssocs $ setDiff xs zs
-                       y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy (mkTyConTy rowAssocTy) ys]
+                       rowAssocKi = mkTyConApp rowAssocTyCon [k]
+                       y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
                  ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
                                                                                               , ppr x, ppr z, ppr y, ppr ys
                                                                                               , text "computed" <+> ppr y0
@@ -238,10 +236,11 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowLeqCls
-  , Just x_s@(_r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
-  , Just y_s@(_r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
+  , Just x_s@(_r_tycon1, [kx, assocs_x])<- API.splitTyConApp_maybe x
+  , Just y_s@(_r_tycon2, [ky, assocs_y])<- API.splitTyConApp_maybe y
   , let xs = sortAssocs $ unfold_list_type_elems assocs_x
   , let ys = sortAssocs $ unfold_list_type_elems assocs_y
+  , API.eqType kx ky -- we are not having hetrogenous row concat
   = if (checkMembership xs ys)
     then do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--" (vcat [ ppr clsCon
                                                          , ppr x_s, ppr xs
@@ -270,7 +269,7 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
        }
 
 
-  | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches" (ppr acc)
+  | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
                    return acc
 
 
@@ -296,7 +295,7 @@ solve_improvement PluginDefs{..} acc ct1 ct2
   = do { API.tcPluginTrace "--Plugin solving improvement for Plus & ~<~ --" (vcat [ ppr predTy ])
        ; if (checkSubset xs zs)
          then do { let ys = setDiff xs zs
-                       y0 = API.mkTyConApp _r_tycon1 [k,  mkPromotedListTy (mkTyConTy rowAssocTy) ys]
+                       y0 = API.mkTyConApp _r_tycon1 [k,  mkPromotedListTy (mkTyConTy rowAssocTyCon) ys]
                  ; let co = mkCoercion API.Nominal y y0
                        coTy = mkCoercionTy co
                        evLoc = API.ctLoc ct
@@ -395,34 +394,35 @@ tcPluginRewrite defs@(PluginDefs {rowPlusTF, allTF}) = API.listToUFM [ (rowPlusT
 
 -- | Constraints like All Functor (R [x := t]) should reduce to () as they are trivially satisfiable
 rewrite_allTF :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
-rewrite_allTF (PluginDefs { .. }) givens tys
+rewrite_allTF (PluginDefs { .. }) _givens tys
   | [_, clsTyCon, r] <- tys
   , API.eqType clsTyCon (mkNakedTyConTy $ API.classTyCon functorCls)
   , Just (rtc_mb, _) <- API.splitTyConApp_maybe r
   , rtc_mb == rTyCon
   -- TODO: and possibly check if the assocs are well formed?
-  = do API.tcPluginTrace "--Plugin All TF unit constraint--" (vcat [ ppr allTF, ppr tys, ppr givens ])
+  = do API.tcPluginTrace "--Plugin All TF unit constraint--" (vcat [ ppr allTF, ppr tys, ppr _givens ])
        -- return a unit constraint?
        pure $ API.TcPluginRewriteTo
                            (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal allTF tys
                                (mkConstraintTupleTy []))
                            []
   | otherwise
-  = do API.tcPluginTrace "--Plugin All TF--" (vcat [ ppr allTF, ppr tys, ppr givens ])
+  = do API.tcPluginTrace "--Plugin All TF--" (vcat [ ppr allTF, ppr tys, ppr _givens ])
        pure API.TcPluginNoRewrite
 
 -- | Reduce (x := t) ~+~ (y := u) to [x := t, y := u]
---   The label occurance in the list is lexicographic.
+--   Post condition: The label occurance in the list is lexicographic.
 rewrite_rowplus :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
 rewrite_rowplus (PluginDefs { .. }) _givens tys
-  | [k, a, b] <- tys
+  | [_, a, b] <- tys
   = if
-      | Just (_ , [_, arg_a]) <- API.splitTyConApp_maybe a
-      , Just (_ , [_, arg_b]) <- API.splitTyConApp_maybe b
+      | Just (_ , [ka, arg_a]) <- API.splitTyConApp_maybe a
+      , Just (_ , [kb, arg_b]) <- API.splitTyConApp_maybe b
       , assocs_a <- unfold_list_type_elems arg_a
       , assocs_b <- unfold_list_type_elems arg_b
+      , API.eqType ka kb
       , let concat_assocs = sortAssocs $ assocs_a ++ assocs_b
-            rowAssocKi = head assocs_a
+            rowAssocKi = mkTyConApp rowAssocTyCon [ka]
       -> do API.tcPluginTrace "--Plugin RowConcatRewrite (~+~)--" (vcat [ text "args_a:" <+> ppr assocs_a
                                                                   , text "args_b:" <+> ppr assocs_b
                                                                   , text "args:"   <+> ppr concat_assocs
@@ -431,7 +431,7 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
                                                             )
             pure $ API.TcPluginRewriteTo
                            (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal rowPlusTF tys
-                               (API.mkTyConApp rTyCon [k, mkPromotedListTy rowAssocKi concat_assocs]))
+                               (API.mkTyConApp rTyCon [ka, mkPromotedListTy rowAssocKi concat_assocs]))
                            []
       | otherwise
       -> pure API.TcPluginNoRewrite
