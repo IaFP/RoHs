@@ -155,7 +155,7 @@ main_solver defs _ wanteds = do (s, _, _) <- try_solving defs ([], [], []) wante
 try_solving :: PluginDefs -> PluginWork -> [API.Ct] -> API.TcPluginM API.Solve PluginWork
 try_solving defs acc@(solved, unsolveds, equalities) wanteds =
   do acc'@(solved', _, equalities') <- foldlM (solve_trivial defs) acc wanteds
-     API.tcPluginTrace "--Plugin Solve improvements--" (vcat [ ppr unsolveds
+     API.tcPluginTrace "--Plugin Solve Improvements--" (vcat [ ppr unsolveds
                                                              , ppr equalities
                                                              ])
      if madeProgress (solved, solved') (equalities, equalities')
@@ -228,7 +228,35 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
                                                  ) }
          else return $ mergePluginWork acc ([], [ct], [])
        }
+  -- Handles the case where x is unknown but y and z is known
+  -- technically this is solvable by swapping x and y from the previous case, but i'm afraid
+  -- i'll make the plugin solver go another round which would be generating unnecessary extra
+  -- constraints.
+  | predTy <- API.ctPred ct
+  , Just (clsCon, ([_, y, x, z])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowPlusCls
+  , Just (r_tycon, [k, assocs_x])<- API.splitTyConApp_maybe x
+  , Just (_, [_, assocs_z])<- API.splitTyConApp_maybe z
+  , let xs = sortAssocs $ unfold_list_type_elems assocs_x
+  , let zs = sortAssocs $ unfold_list_type_elems assocs_z
+  , Just yTVar <- getTyVar_maybe y
+  -- y is just a type variable which we will solve for
+  = do { API.tcPluginTrace "--Plugin solving improvement for Plus with Eq emit --" (vcat [ ppr predTy ])
+       ; if (checkSubset xs zs)
+         then do { let ys = sortAssocs $ setDiff xs zs
+                       rowAssocKi = mkTyConApp rowAssocTyCon [k]
+                       y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
+                 ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
+                                                                                              , ppr x, ppr z, ppr y, ppr ys
+                                                                                              , text "computed" <+> ppr y0
+                                                                                              ])
 
+                 ; return $ mergePluginWork acc ([ (mkIdFunEvTerm predTy, ct) ]
+                                                 , [] -- no new wanteds
+                                                 , [(yTVar, y0)] -- new equalilites
+                                                 ) }
+         else return $ mergePluginWork acc ([], [ct], [])
+       }
 
   --  Handles the case of x ~<~ x
   | predTy <- API.ctPred ct
@@ -240,9 +268,13 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
        ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], []) }
 
   -- Handles the case of [(x := t)] ~<~ [(x := t), (y := u)]
+  -- with the case where y0 ~<~ z0 but we have a substitution which makes it true
   | predTy <- API.ctPred ct
-  , Just (clsCon, ([_, x, y])) <- API.splitTyConApp_maybe predTy
+  , Just (clsCon, ([_, x', y'])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowLeqCls
+  , let s = mkTvSubstPrs eqs
+  , let x = substTy s x'
+  , let y = substTy s y'
   , Just x_s@(_r_tycon1, [kx, assocs_x])<- API.splitTyConApp_maybe x
   , Just y_s@(_r_tycon2, [ky, assocs_y])<- API.splitTyConApp_maybe y
   , let xs = sortAssocs $ unfold_list_type_elems assocs_x
@@ -258,22 +290,6 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
                                                          , ppr y_s, ppr ys])
             ; return $ mergePluginWork acc ([], [ct], []) } -- no need to actually throw error here
                            -- it might fail down the tc pipleline anyway with a good error message
-
-  --  Handles the case of x ~<~ y with additional equality condition that x ~ y
-  | predTy <- API.ctPred ct
-  , Just (clsCon, ([_, x, y])) <- API.splitTyConApp_maybe predTy
-  , clsCon == API.classTyCon rowLeqCls
-  , not (null eqs)
-  = do { let s = mkTvSubstPrs eqs
-             x' = substTy s x
-             test = API.eqType x' y
-       ; API.tcPluginTrace "--Plugin solving ~<~ construct evidence with eqs--" (vcat [ ppr test, ppr clsCon, ppr eqs
-                                                                                      , ppr x , ppr y, ppr (substTys s [x,y])
-                                                                                      ])
-
-       ; if test then return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], [])
-                 else return $ acc
-       }
 
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
