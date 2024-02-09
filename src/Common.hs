@@ -14,15 +14,8 @@ data Row :: Type -> Type where
 data Assoc :: Type -> Type where
   (:=) :: Symbol -> a -> Assoc a
 
--- instance Eq (Assoc a) where
---   (s := _) == (s' := _) = sameSymbol s s'
-
--- instance Ord (Assoc a) where
---   (s := x) <= (s' := y) = s <= s'
-
 class (~<~) (a :: Row t) (b :: Row t)
-  -- probably shouldn't have user instances of this class... :P
--- instance a ~<~ a
+-- probably shouldn't have user instances of this class... :P
 
 -- This is what I really want:
 type family (~+~) (a :: Row t) (b :: Row t) = (c :: Row t)
@@ -32,13 +25,12 @@ type family (~+~) (a :: Row t) (b :: Row t) = (c :: Row t)
 -- progress using the following definition:
 
 class (x ~<~ z, y ~<~ z) => Plus (x :: Row t) (y :: Row t) (z :: Row t)
-   | x y -> z, -- Does Plus x y (x ~+~ y) ~ Plus x y (y ~+~ x)? the types are checked nominally for equality. and this one violates the functional dependency
-    x z -> y,
-    y z -> x
+   | x y -> z,
+     x z -> y,
+     y z -> x
 
 -- But if this is going to *actually* work, we're going to need to step in with
 -- some defaulting to actually fix `z`s.
-
 
 
 -- Records ahoy
@@ -52,7 +44,7 @@ type family V1 :: Row (a -> Type) -> a -> Type where
 
 
 -- Okay, let's try Rω again.  Same fundamental problem: we need to replace the use of type-level λs.
-type family Each :: (a -> b) -> Row a -> Row b where
+type family Each (f :: (a -> b)) (r :: Row a) :: Row b where
   -- I have a feeling that this is not going to work out for me... see the
   -- `constants` example below.  The crux of the issue is that I want to
   -- "axiomatize" `Each f z` with statements like `y ~<~ z => Each f y ~<~ Each
