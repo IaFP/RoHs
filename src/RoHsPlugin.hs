@@ -133,24 +133,27 @@ tcPluginInit = do
 
 -- The entry point for constraint solving
 tcPluginSolve :: PluginDefs -> [ API.Ct ] -> [ API.Ct ] -> API.TcPluginM API.Solve API.TcPluginSolveResult
-tcPluginSolve _ givens [] = do -- simplify given constraints
-  API.tcPluginTrace "--Plugin Solve Givens--" (ppr givens)
+tcPluginSolve _ _ [] = do -- simplify given constraints, we don't have to worry about it it
+  -- API.tcPluginTrace "--Plugin Solve Givens--" (ppr givens)
   pure $ API.TcPluginOk [] []
 tcPluginSolve defs givens wanteds = do
-  API.tcPluginTrace "--Plugin Solve Wanteds start--" (ppr givens $$ ppr wanteds)
-  (solved, _, _) <- try_solving defs ([], [], []) wanteds
+  API.tcPluginTrace "--Plugin Solve Wanteds Start--" (ppr givens $$ ppr wanteds)
+  solved <- main_solver defs givens wanteds
   API.tcPluginTrace "--Plugin Solve Wanteds Done--" (vcat [ ppr wanteds
                                                           , text "---------------"
                                                           , ppr solved
                                                           ])
   pure $ API.TcPluginOk solved [] -- we never emit new wanteds
 
+main_solver :: PluginDefs -> [API.Ct] -> [API.Ct] -> API.TcPluginM API.Solve [(API.EvTerm, API.Ct)]
+main_solver defs _ wanteds = do (s, _, _) <- try_solving defs ([], [], []) wanteds -- we don't use givens as of now.
+                                return s
 
 -- | Try solving a given constraint
 --   What should be the strategy look like? Here's what i'm going to try and implement
---   0. Get all the trivial constraints out of the way by using solve_trivial
---   1. Do a collective improvement where we use the set of givens and set of wanteds
---   2. if we have made some progress go to step 0
+--       0. Get all the trivial constraints out of the way by using solve_trivial
+--       1. Do a collective improvement where we use the set of givens and set of wanteds
+--       2. if we have made some progress go to step 0
 try_solving :: PluginDefs -> PluginWork -> [API.Ct] -> API.TcPluginM API.Solve PluginWork
 try_solving defs acc wanteds = do (solved, unsolveds, equalities) <- foldlM (solve_trivial defs) acc wanteds
                                   -- let improved_unsolved = fmap (API.substCt equalities) unsolveds
