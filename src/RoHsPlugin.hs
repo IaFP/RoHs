@@ -5,6 +5,8 @@
 {-# LANGUAGE NamedFieldPuns  #-}
 {-# LANGUAGE MultiWayIf      #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 module RoHsPlugin (plugin) where
 
 import qualified GHC.Plugins as GHC (Plugin(..), defaultPlugin, purePlugin, mkLocalId)
@@ -27,6 +29,9 @@ import GHC.Types.Unique
 import GHC.Types.SrcLoc
 import GHC.Builtin.Types
 
+import SourcePlugin
+
+
 -- TODOs: The plugin should enable replacing class Common.Plus with Common.(~+~)
 
 -- The point of this exercise it to show that the GHCs injective type families (implementation, the very least)
@@ -39,6 +44,7 @@ plugin =
   GHC.defaultPlugin
     { GHC.tcPlugin        = \ _args -> Just $ API.mkTcPlugin tcPlugin
     , GHC.pluginRecompile = GHC.purePlugin
+    , GHC.renamedResultAction = addPlusConstraints
     }
 tcPlugin :: API.TcPlugin
 tcPlugin =

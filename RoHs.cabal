@@ -53,8 +53,9 @@ extra-doc-files:    CHANGELOG.md
 
 common ghcopts
     ghc-options: -Wall
-                 -- -ddump-tc-trace
-                 -- -dcore-lint
+                 -ddump-rn-trace
+                 -ddump-tc-trace
+                 -dcore-lint
 
 library
     -- Import common warning flags.
@@ -66,6 +67,7 @@ library
                       RoHsCorePlugin
                       Common
                       -- Example
+                      SourcePlugin
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -75,8 +77,9 @@ library
 
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.18,
-                      ghc ^>=9.6.4,
-                      ghc-tcplugin-api ^>= 0.11.0.0,
+                      ghc >=9.6.2,
+                      ghc-tcplugin-api ^>= 0.11.0.0,                      
+                      mtl ^>= 2.3,
                       ghc-tcplugins-extra ^>= 0.4.5
     -- Directories containing source files.
     hs-source-dirs:   src

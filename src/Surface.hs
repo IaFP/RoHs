@@ -14,7 +14,12 @@ import Data.Proxy
 -- See if we can do anything
 
 foo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool]))
-foo = undefined
+foo = labR0 @"x" (1 :: Int) `cat0` labR0 @"y" True
+
+-- Demonstrates the (first features of the) source plugin: source plugin adds
+-- needed `Plus` constraint.
+foo1 :: R0 x -> R0 y -> R0 (x ~+~ y)
+foo1 r s = r `cat0` s
 
 -- Well this is potentially annoying...
 
@@ -210,8 +215,8 @@ desugar' :: forall bigr smallr.
 desugar' (Wrap e) = Wrap ((double `brn1` (fmapV desugar' . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar' x) (desugar' x)))
 
--- Here's a very explicit type...
 desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
+-- Here's a very explicit type...
 -- desugar = desugar'
 desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
