@@ -2,8 +2,8 @@
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
-{-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHsPlugin #-}
--- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHsPlugin #-}
+-- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHsPlugin #-}
+{-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHsPlugin #-}
 
 module Surface where
 
@@ -20,6 +20,18 @@ foo = labR0 @"x" (1 :: Int) `cat0` labR0 @"y" True
 -- needed `Plus` constraint.
 foo1 :: R0 x -> R0 y -> R0 (x ~+~ y)
 foo1 r s = r `cat0` s
+
+
+-- (1) foo :: R0 (R '["x" := Int, "x" := Bool])) -- user written
+
+-- (2) foo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool])) -- src plugin
+
+-- (3)
+-- foo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool]))
+-- tc-plugin checks for this Plus (R '["x" := Int]) R ('["y" := Bool]) (R '["x" := Int] ~+~ (R '["y" := Bool]))
+foo_works :: Plus (R '["x" := Int]) ((R '["y" := Bool])) z => R0 z
+foo_works =  (labR0 @"x" (1::Int)) `cat0` (labR0 @"y" (False::Bool))
+
 
 -- Well this is potentially annoying...
 
