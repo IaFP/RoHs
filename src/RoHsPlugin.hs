@@ -25,6 +25,7 @@ import qualified CorePlugin as CP (install)
 --                    Eg. `Plus (x:=t) y0 ( x:=t , y := u )` will deduce y0 ~ y := u
 --
 --               Internalize the representations of `labX` `unLabX` primitives
+--               Internal.hs to be ported into manipulating dictonary evidences
 
 plugin :: GHC.Plugin
 plugin =
