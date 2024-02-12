@@ -14,6 +14,8 @@ data Row :: Type -> Type where
 data Assoc :: Type -> Type where
   (:=) :: Symbol -> a -> Assoc a
 
+type Label = Symbol
+
 class (~<~) (a :: Row t) (b :: Row t)
 -- probably shouldn't have user instances of this class... :P
 

@@ -161,19 +161,22 @@ anaA0 :: -- forall c {z} {t}.
       -> V0 ((R '[s := u]) ~+~ y) -> t
 anaA0 _ = undefined
 
+
+showV :: forall {s} {u} {y}. (All Show (R '[ s := u ] ~+~ y)) => V0 (R '[ s := u ] ~+~ y) -> String
+showV = anaA0 @Show (const show)
+
+
 anaA1 :: forall c {s} {u} {y} {t} {f}.
          (All c (R '[s := f] ~+~ y), c f)
       => (Proxy s -> f u -> t) -- Proxy!? see `fmapV` below
       -> V1 (R '[s := f] ~+~ y) u -> t
 anaA1 _ = undefined
 
-showV :: forall z. (All Show z) => V0 z -> String
-showV = anaA0 @Show (const show)
 
-showV1 :: forall z. All Show z => V0 z -> String
-showV1 = anaA0 @Show f
+showV1 :: All Show (R '[ s := u ] ~+~ y) => V0 (R '[ s := u ] ~+~ y) -> String
+showV1 = anaA0 @Show f -- ANI: should this be V1?
   where f _ x = show x
-{-
+
 -- But apparently adding the type signature will make `f` no longer have the
 -- right type.  I am concerned that I am missing something fundamental here...
 
@@ -190,14 +193,18 @@ showV1 = anaA0 @Show f
 -- constants = ana0 f where
 --   f x = con0 (\y -> x)
 
-eqV :: forall z. All Eq z => V0 z -> V0 z -> Bool
+-- eqV :: forall z. All Eq z => V0 z -> V0 z -> Bool
+eqV :: forall s u y.
+       (Eq u, All Eq (R '[ s := u ] ~+~ y))
+    => V0 (R '[ s := u ] ~+~ y) -> V0 (R '[ s := u ] ~+~ y) -> Bool
 eqV v w = anaA0 @Eq g w where
-  g :: forall s y t. (Plus (R '[s := t]) y z, Eq t)
-                  =>  Proxy s -> t -> Bool
+  -- g :: forall (s :: Label) y u. Eq u =>  Proxy s -> u -> Bool
   g _ x = (case0 @s (\y -> x == y) `brn0` const False) v
 
 
-fmapV :: forall a b z. All Functor z => (a -> b) -> V1 z a -> V1 z b
+fmapV :: forall s u y {a} {b}.
+         (Functor u, All Functor (R '[ s := u ] ~+~ y))
+      => (a -> b) -> V1 (R '[ s := u ] ~+~ y) a -> V1 (R '[ s := u ] ~+~ y) b
 fmapV f = anaA1 @Functor g where
 
   -- Without the `Proxy s` argument, `g` types fine but doesn't play well as n
@@ -205,8 +212,8 @@ fmapV f = anaA1 @Functor g where
 
   -- Can't get away without the type annotation here... even if I try to pattern
   -- match on the proxy.  Let's pretend I understand anything.
-  g :: forall s y f. (Plus (R '[s := f]) y z, Functor f)
-                  => Proxy s -> f a -> V1 z b
+  -- g :: forall s y u f a b. (Functor f)
+  --                 => Proxy s -> f a -> V1 (R '[ s := u ] ~+~ y) b
   g _ x = con1 @s (fmap f x)
 
 -- This should be enough to do something dumb.  Let's try....
@@ -223,16 +230,21 @@ type BigR = R '["Const" := ZeroF Int] ~+~  R '["Add" := TwoF] ~+~ R '["Double" :
 type SmallR = R '["Const" := ZeroF Int] ~+~ R '["Add" := TwoF]
 
 
-desugar' :: forall bigr smallr.
-           (-- These are essentially part of the type
-            Plus (R '["Double" := OneF]) smallr bigr,
-            All Functor smallr,
-            R '["Add" := TwoF] ~<~ smallr
-           ) =>
-           Mu (V1 bigr) -> Mu (V1 smallr)
+desugar' :: -- forall bigr smallr.
+            -- (-- These are essentially part of the type
+            --  Plus (R '["Double" := OneF]) smallr bigr,
+            --  All Functor smallr,
+            --  R '["Add" := TwoF] ~<~ smallr
+            -- ) =>
+            -- Mu (V1 bigr) -> Mu (V1 smallr)
+            forall smallr.
+            All Functor (R '["Add" := TwoF] ~+~ smallr)
+         =>
+            Mu (V1 ((R '["Double" := OneF]) ~+~ smallr)) -> Mu (V1 smallr)
+
 desugar' (Wrap e) = Wrap ((double `brn1` (fmapV desugar' . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar' x) (desugar' x)))
-
+{-
 desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
 -- Here's a very explicit type...
 -- desugar = desugar'

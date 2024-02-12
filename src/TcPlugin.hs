@@ -9,7 +9,7 @@
 {-# HLINT ignore "Use camelCase" #-}
 module TcPlugin (tcPlugin) where
 
-import qualified GHC.Plugins as GHC (mkLocalId)
+import qualified GHC.Plugins as GHC (mkLocalId, mkPrimEqPred)
 import GHC.Utils.Outputable
 
 -- ghc-tcplugin-api
@@ -130,16 +130,16 @@ tcPluginSolve _ _ [] = do -- simplify given constraints, we don't have to worry 
   pure $ API.TcPluginOk [] []
 tcPluginSolve defs givens wanteds = do
   API.tcPluginTrace "--Plugin Solve Wanteds Start--" (ppr givens $$ ppr wanteds)
-  solved <- main_solver defs givens wanteds
+  (solved, ws) <- main_solver defs givens wanteds
   API.tcPluginTrace "--Plugin Solve Wanteds Done--" (vcat [ ppr wanteds
                                                           , text "---------------"
                                                           , ppr solved
                                                           ])
-  pure $ API.TcPluginOk solved [] -- we never emit new wanteds
+  pure $ API.TcPluginOk solved ws
 
-main_solver :: PluginDefs -> [API.Ct] -> [API.Ct] -> API.TcPluginM API.Solve [(API.EvTerm, API.Ct)]
-main_solver defs _ wanteds = do (s, _, _) <- try_solving defs ([], [], []) wanteds -- we don't use givens as of now.
-                                return s
+main_solver :: PluginDefs -> [API.Ct] -> [API.Ct] -> API.TcPluginM API.Solve ([(API.EvTerm, API.Ct)], [API.Ct])
+main_solver defs _ wanteds = do (s, w, _) <- try_solving defs ([], [], []) wanteds -- we don't use givens as of now.
+                                return (s, w)
 
 -- | Try solving a given constraint
 --   What should be the strategy look like? Here's what i'm going to try and implement
@@ -251,6 +251,26 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
                                                  ) }
          else return $ mergePluginWork acc ([], [ct], [])
        }
+
+  -- Handles the case where z is of the form x ~+~ y in Plus x y z
+
+  | predTy <- API.ctPred ct
+  , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowPlusCls
+  , Just (ztyCon, [_, z1, z2]) <- API.splitTyConApp_maybe z
+  , ztyCon == rowPlusTF
+  -- , API.eqType x z1 && API.eqType y z2 || API.eqType y z1 && API.eqType x z2
+  =  do { API.tcPluginTrace "--Plugin solving Plus and ~+~--" (vcat [ ppr clsCon
+                                                                    , ppr x, ppr y, ppr z
+                                                                    , ppr rowPlusTF
+                                                                    , ppr z1, ppr z2 ])
+        ; nw1 <- API.newWanted (API.ctLoc ct) (GHC.mkPrimEqPred x z1)
+        ; nw2 <- API.newWanted (API.ctLoc ct) (GHC.mkPrimEqPred  y z2)
+        ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)]
+                                        , API.mkNonCanonical <$> [ nw1, nw2 ]
+                                        , [])
+        }
+
 
   --  Handles the case of x ~<~ x
   | predTy <- API.ctPred ct
