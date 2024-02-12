@@ -7,8 +7,8 @@ import           GHC.Tc.Utils.Monad (traceRn)
 import           GHC.Tc.Plugin          as GHC
 import           GHC.Tc.Types
 
--- import Data.Generics.Aliases
--- import Data.Generics.Schemes
+import Data.Generics.Aliases
+import Data.Generics.Schemes
 
 import Control.Monad.Writer
 
@@ -36,23 +36,23 @@ addPlusConstraints _options gblEnv grp =
      commonModule   <- findCommonModule
      rowPlusName    <- runTcPluginM (lookupOrig commonModule (mkTcOcc "~+~"))
      plusPredicateName <- runTcPluginM (lookupOrig commonModule (mkTcOcc "Plus"))
-     grp'           <- xformG rowPlusName plusPredicateName grp
-     -- return (gblEnv, grp)
+     grp' <- everywhereM (mkM (xformSignatures rowPlusName plusPredicateName)) grp
      return (gblEnv, grp')
 
-xformG :: Name -> Name -> HsGroup GhcRn -> TcM (HsGroup GhcRn)
-xformG rowPlusName plusPredicateName g =
-  do valds' <- xformVD rowPlusName plusPredicateName (hs_valds g)
-     tyclds' <- mapM (xformTD rowPlusName plusPredicateName) (hs_tyclds g)
-     return g { hs_valds = valds', hs_tyclds = tyclds' }
-
-xformVD :: Name -> Name -> HsValBinds GhcRn -> TcM (HsValBinds GhcRn)
-xformVD rowPlusName plusPredicateName block@(ValBinds ext binds sigs) =
-  do sigs' <- mapM (xformSignatures rowPlusName plusPredicateName) sigs
-     return (ValBinds ext binds sigs')
-xformVD rowPlusName plusPredicateName (XValBindsLR (NValBinds binds sigs)) =
-  do sigs' <- mapM (xformSignatures rowPlusName plusPredicateName) sigs
-     return (XValBindsLR (NValBinds binds sigs'))
+-- Being smarter about SYB
+--
+-- xformG :: Name -> Name -> HsGroup GhcRn -> TcM (HsGroup GhcRn)
+-- xformG rowPlusName plusPredicateName g =
+--   do valds' <- xformVD rowPlusName plusPredicateName (hs_valds g)
+--      tyclds' <- mapM (xformTD rowPlusName plusPredicateName) (hs_tyclds g)
+--      return g { hs_valds = valds', hs_tyclds = tyclds' }
+-- 
+-- xformVD :: Name -> Name -> HsValBinds GhcRn -> TcM (HsValBinds GhcRn)
+-- xformVD rowPlusName plusPredicateName block@(ValBinds ext binds sigs) =
+--   return block -- seems like plugins only get called with the next case...
+-- xformVD rowPlusName plusPredicateName (XValBindsLR (NValBinds binds sigs)) =
+--   do sigs' <- mapM (xformSignatures rowPlusName plusPredicateName) sigs
+--      return (XValBindsLR (NValBinds binds sigs'))
 
 xformSignatures :: Name -> Name -> LSig GhcRn -> TcM (LSig GhcRn)
 xformSignatures rowPlusName plusPredicateName (L sigLoc (TypeSig tsext ids (HsWC wcext (L sigTypeLoc sigType@(HsSig {}))))) =
@@ -60,9 +60,6 @@ xformSignatures rowPlusName plusPredicateName (L sigLoc (TypeSig tsext ids (HsWC
      return (L sigLoc (TypeSig tsext ids (HsWC wcext (L sigTypeLoc sigType { sig_body = sig_body' }))))
 xformSignatures _ _ sig =
   do return sig
-
-xformTD :: Name -> Name -> TyClGroup GhcRn -> TcM (TyClGroup GhcRn)
-xformTD _ _ tds = return tds
 
 xformT :: Name -> Name -> LHsType GhcRn -> TcM (LHsType GhcRn)
 xformT rowPlus plusPredicateName t =
