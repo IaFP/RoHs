@@ -29,8 +29,9 @@ foo1 r s = r `cat0` s
 -- (3)
 -- foo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool]))
 -- tc-plugin checks for this Plus (R '["x" := Int]) R ('["y" := Bool]) (R '["x" := Int] ~+~ (R '["y" := Bool]))
-foo_works :: Plus (R '["x" := Int]) ((R '["y" := Bool])) z => R0 z
-foo_works =  (labR0 @"x" (1::Int)) `cat0` (labR0 @"y" (False::Bool))
+-- For now user cannot write Plus x y z. \tau type signatures.
+-- foo_works :: forall z. Plus (R '["x" := Int]) ((R '["y" := Bool])) z => R0 z
+-- foo_works =  (labR0 @"x" (1::Int)) `cat0` (labR0 @"y" (False::Bool))
 
 
 -- Well this is potentially annoying...
@@ -44,8 +45,8 @@ unlabR0 = undefined
 prj0 :: forall z y. z ~<~ y => R0 y -> R0 z
 prj0 = undefined
 
--- cat0 :: R0 y -> R0 z -> R0 (y ~+~ z)
-cat0 :: Plus y z x => R0 y -> R0 z -> R0 x
+cat0 :: R0 y -> R0 z -> R0 (y ~+~ z)
+-- cat0 :: Plus y z x => R0 y -> R0 z -> R0 x
 cat0 _ _ = undefined
 
 -- Sigh...
@@ -59,8 +60,8 @@ unlabR1 = undefined
 prj1 :: z ~<~ y => R1 y t -> R1 z t
 prj1 = undefined
 
--- cat1 :: R1 y t -> R1 z t -> R1 (y ~+~ z) t
-cat1 :: Plus y z x => R1 y t -> R1 z t -> R1 x t
+cat1 :: R1 y t -> R1 z t -> R1 (y ~+~ z) t
+-- cat1 :: Plus y z x => R1 y t -> R1 z t -> R1 x t
 cat1 _ _ = undefined
 
 sel0 :: forall s {t} {z}. R '[s := t] ~<~ z => R0 z -> t
@@ -85,12 +86,12 @@ inj0 = undefined
 inj1 :: y ~<~ z => V1 y t -> V1 z t
 inj1 = undefined
 
--- brn0 :: (V0 x -> t) -> (V0 y -> t) -> V0 (x ~+~ y) -> t
-brn0 :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
+brn0 :: (V0 x -> t) -> (V0 y -> t) -> V0 (x ~+~ y) -> t
+-- brn0 :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
 brn0 = undefined
 
--- brn1 :: (V1 x t -> u) -> (V1 y t -> u) -> V1 (x ~+~ y) t -> u
-brn1 :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
+brn1 :: (V1 x t -> u) -> (V1 y t -> u) -> V1 (x ~+~ y) t -> u
+-- brn1 :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
 brn1 = undefined
 
 -- and we can define
@@ -128,46 +129,51 @@ bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
 --        inj0 @z
 
-bar2 :: forall z y1 y2.
-        -- Bit of a run-around here because GHC doesn't like `z ~<~ x ~+~ y` constraints
-        (Plus (R '["x" := Integer]) z y1,    -- `Integer` so defaulting doesn't get in the way
-         Plus (R '["x" := Bool]) z y2) =>
-        V0 y1 -> V0 y2
+bar2 :: forall y. V0 (R '["x" := Integer] ~+~ y) -> V0 (R '["x" := Bool] ~+~ y)
 bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
   where zero :: Integer = 0
 
 
-ana0 :: forall z t.
-        (forall s y {u}. (Plus (R '[s := u]) y z) => u -> t) ->
-        V0 z -> t
+ana0 :: -- forall z t.
+        -- (forall s y {u}. (Plus (R '[s := u]) y z) => u -> t) ->
+        -- V0 z -> t
+        forall t {s} {u} {y}.
+        (u -> t) ->
+        V0 ((R '[s := u]) ~+~ y) -> t
 ana0 _ = undefined
 
-anaE0 :: forall phi {z} {t}.
-         (forall s y {u}. (Plus (R '[s := u]) y z) => phi u -> t) ->
-         V0 (Each phi z) -> t
+anaE0 :: -- forall phi {z} {t}.
+         -- (forall s y {u}. (Plus (R '[s := u]) y z) => phi u -> t) ->
+         -- V0 (Each phi z) -> t
+         forall phi {s} {y} {u} {t}.
+         (phi u -> t) ->
+         V0 (Each phi ((R '[s := u]) ~+~ y)) -> t
 anaE0 _ = undefined
 
-anaA0 :: forall c {z} {t}.
-         All c z =>
-         (forall s y {u}. (Plus (R '[s := u]) y z, c u) =>
-                           Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
-      -> V0 z -> t
+anaA0 :: -- forall c {z} {t}.
+      --    All c z =>
+      --    (forall s y {u}. (Plus (R '[s := u]) y z, c u) =>
+      --                      Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
+      -- -> V0 z -> t
+         forall c {s} {u} {y} {t}.
+         (All c (R '[s := u] ~+~ y))
+      => (c u => Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
+      -> V0 ((R '[s := u]) ~+~ y) -> t
 anaA0 _ = undefined
 
-anaA1 :: forall c {z} {t} {u}.
-         All c z =>
-         (forall s y {f}. (Plus (R '[s := f]) y z, c f)
-                        => Proxy s -> f u -> t) -- Proxy!? see `fmapV` below
-      -> V1 z u -> t
+anaA1 :: forall c {s} {u} {y} {t} {f}.
+         (All c (R '[s := f] ~+~ y), c f)
+      => (Proxy s -> f u -> t) -- Proxy!? see `fmapV` below
+      -> V1 (R '[s := f] ~+~ y) u -> t
 anaA1 _ = undefined
 
-showV :: forall z. All Show z => V0 z -> String
+showV :: forall z. (All Show z) => V0 z -> String
 showV = anaA0 @Show (const show)
 
 showV1 :: forall z. All Show z => V0 z -> String
-showV1 = anaA0 @Show f where
-  f _ x = show x
-
+showV1 = anaA0 @Show f
+  where f _ x = show x
+{-
 -- But apparently adding the type signature will make `f` no longer have the
 -- right type.  I am concerned that I am missing something fundamental here...
 
@@ -232,3 +238,4 @@ desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
 -- desugar = desugar'
 desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
+-}

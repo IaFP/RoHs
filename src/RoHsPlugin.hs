@@ -16,7 +16,13 @@ import qualified SourcePlugin as SP (addPlusConstraints)
 import qualified TcPlugin as TP (tcPlugin)
 
 -- TODOs: (DONE) The plugin should enable replacing class Common.Plus with Common.(~+~)
+--
+--        (DONE) Solving those `Plus` constraints.
+--                    It also computes the right unknown meta variable
+--                    Eg. `Plus (x:=t) y0 ( x:=t , y := u )` will deduce y0 ~ y := u
+--
 --               Internalize the representations of `labX` `unLabX` primitives
+--               Internal.hs to be ported into manipulating dictonary evidences
 
 plugin :: GHC.Plugin
 plugin =
