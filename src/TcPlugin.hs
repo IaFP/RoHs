@@ -14,11 +14,14 @@ import GHC.Utils.Outputable
 
 -- ghc-tcplugin-api
 import qualified GHC.TcPlugin.API as API
+import qualified GHC.TcPluginM.Extra as API hiding (newWanted)
 import GHC.Core.TyCo.Rep
--- import GHC.TcPlugin.API ( TcPluginErrorMessage(..) )
+import GHC.TcPlugin.API ( TcPluginErrorMessage(..) )
+
 import GHC.Core
 import GHC.Core.Make
 import GHC.Core.Type
+import GHC.Core.Predicate
 
 import Data.List (sortBy)
 import Data.Foldable (foldlM)
@@ -68,48 +71,57 @@ data PluginDefs =
     , rowLeqCls        :: !API.Class -- standin for ~<~
     , rowPlusCls       :: !API.Class -- standin for Plus
     , functorCls       :: !API.Class -- standin for Functor
+    -- , primEqCls        :: !API.Class
     }
 
 
-findCommonModule :: API.MonadTcPlugin m => m API.Module
-findCommonModule = do
-  let modlName = API.mkModuleName "Common"
-  pkgQual    <- API.resolveImport      modlName Nothing
+findModule :: API.MonadTcPlugin m => String -> Maybe String -> m API.Module
+findModule moduleName pkgName_mb = do
+  let modlName = API.mkModuleName moduleName
+  pkgQual    <- API.resolveImport      modlName (API.fsLit <$> pkgName_mb)
   findResult <- API.findImportedModule modlName pkgQual
   case findResult of
     API.Found _ res     -> pure res
-    API.FoundMultiple _ -> error $ "RoHs.Plugin: found multiple modules named RoHs.Common in the current package."
-    _                   -> error $ "RoHs.Plugin: could not find any module named RoHs.Common in the current package."
+    API.FoundMultiple _ -> error $ "RoHs.Plugin: found multiple modules named "
+                                   ++ errorSuffix
+    _                   -> error $ "RoHs.Plugin: found no modules named "
+                                   ++ errorSuffix
 
+  where
+    errorSuffix = moduleName ++ " in the " ++ (mkPkgName pkgName_mb) ++ " package."
+
+    mkPkgName Nothing = "urrent"
+    mkPkgName (Just s) = s
+
+
+
+findCommonModule :: API.MonadTcPlugin m => m API.Module
+findCommonModule = findModule "Common" Nothing
 
 
 findPreludeModule :: API.MonadTcPlugin m => m API.Module
-findPreludeModule = do
-  let modlName = API.mkModuleName "GHC.Base"
-  let pkgName = Just $ API.fsLit "base"
-  pkgQual    <- API.resolveImport      modlName pkgName
-  findResult <- API.findImportedModule modlName pkgQual
-  case findResult of
-    API.Found _ res     -> pure res
-    API.FoundMultiple _ -> error $ "RoHs.Plugin: found multiple modules named GHC.Base in the current package."
-    _                   -> error $ "RoHs.Plugin: could not find any module named GHC.Base in the current package."
+findPreludeModule = findModule "GHC.Base" (Just "base")
 
+-- findGhcPrimModule :: API.MonadTcPlugin m => m API.Module
+-- findGhcPrimModule = findModule "GHC.Prim" (Just "ghc")
 
 tcPluginInit :: API.TcPluginM API.Init PluginDefs
 tcPluginInit = do
   API.tcPluginTrace "--Plugin Init--" empty
   commonModule   <- findCommonModule
   preludeModule  <- findPreludeModule
+  -- primModule     <- findGhcPrimModule
 
   rowPlusTF      <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "~+~")
   allTF          <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "All")
   rowTyCon       <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Row")
   rTyCon         <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc "R")
   rowAssoc       <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc ":=")
-  rowLeqCls      <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "~<~")
   rowAssocTyCon  <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Assoc")
+  rowLeqCls      <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "~<~")
   rowPlusCls     <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "Plus")
   functorCls     <- API.tcLookupClass =<< API.lookupOrig preludeModule (API.mkClsOcc "Functor")
+  -- primEqCls      <- API.tcLookupClass =<< API.lookupOrig primModule (API.mkClsOcc "~#")
 
   pure (PluginDefs { rowPlusTF     = rowPlusTF
                    , allTF         = allTF
@@ -121,6 +133,7 @@ tcPluginInit = do
                    , rowPlusCls    = rowPlusCls
                    , rowLeqCls     = rowLeqCls
                    , functorCls    = functorCls
+                   -- , primEqCls     = primEqCls
                    })
 
 -- The entry point for constraint solving
@@ -213,10 +226,11 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
                        y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
                  ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
                                                                                               , ppr x, ppr z, ppr y, ppr ys
-                                                                                              , text "computed" <+> ppr y0
+                                                                                              , text "computed" <+> ppr y <+> text "=:=" <+> ppr y0
                                                                                               ])
 
-                 ; return $ mergePluginWork acc ([ (mkIdFunEvTerm predTy, ct) ]
+                 ; return $ mergePluginWork acc ([ (API.evCoercion $ mkCoercion API.Nominal (API.substType [(yTVar, y0)] predTy) predTy
+                                                   , ct) ]
                                                  , [] -- no new wanteds
                                                  , [(yTVar, y0)] -- new equalilites
                                                  ) }
@@ -235,14 +249,13 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , let zs = sortAssocs $ unfold_list_type_elems assocs_z
   , Just yTVar <- getTyVar_maybe y
   -- y is just a type variable which we will solve for
-  = do { API.tcPluginTrace "--Plugin solving improvement for Plus with Eq emit --" (vcat [ ppr predTy ])
-       ; if (checkSubset xs zs)
+  = do { if (checkSubset xs zs)
          then do { let ys = sortAssocs $ setDiff xs zs
                        rowAssocKi = mkTyConApp rowAssocTyCon [k]
                        y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
-                 ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
+                 ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y (emit equality)--" (vcat [ ppr clsCon
                                                                                               , ppr x, ppr z, ppr y, ppr ys
-                                                                                              , text "computed" <+> ppr y0
+                                                                                              , text "computed" <+> ppr y <+> text "=:=" <+> ppr y0
                                                                                               ])
 
                  ; return $ mergePluginWork acc ([ (mkIdFunEvTerm predTy, ct) ]
@@ -252,8 +265,7 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
          else return $ mergePluginWork acc ([], [ct], [])
        }
 
-  -- Handles the case where z is of the form x ~+~ y in Plus x y z
-
+  -- Handles the case where z is of the form x0 ~+~ y0 in [W] Plus x y (x0 ~+~ y0)
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowPlusCls
@@ -305,12 +317,37 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
             ; return $ mergePluginWork acc ([], [ct], []) } -- no need to actually throw error here
                            -- it might fail down the tc pipleline anyway with a good error message
 
+  -- Handles the case where we have [W] (R [x := t] ~+~ r) ~#  (R [x := t, y := u])
+  -- This just emits the equality constraint [W] r ~# R [y := u]
+  -- This is very specific becuase i want it to be the last resort and not cause the plugin to loop
+  | predTy <- API.ctPred ct
+  , isEqPrimPred predTy
+  , Just (_tc, [_, _, lhsTy, rhsTy]) <- API.splitTyConApp_maybe predTy
+  , Just (_tftc, [_, r, y]) <- API.splitTyConApp_maybe lhsTy
+  , Just yTVar <- getTyVar_maybe y -- y is a type variable
+  , Just (_ , [k , assocs]) <- API.splitTyConApp_maybe r
+  , Just (tcRhs , [_ , rhsAssocs]) <- API.splitTyConApp_maybe rhsTy
+  , tcRhs == rTyCon
+  , let xs = sortAssocs $ unfold_list_type_elems assocs
+  , let ys = sortAssocs $ unfold_list_type_elems rhsAssocs
+  , let diff = setDiff xs ys
+  = do { API.tcPluginTrace "--Plugin solving Type Eq rule--" (vcat [ppr _tc , ppr assocs, ppr rhsAssocs, ppr diff])
+       ; let rowAssocKi = mkTyConApp rowAssocTyCon [k]
+             y0 = API.mkTyConApp rTyCon [k,  mkPromotedListTy rowAssocKi diff]
+       ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--" (text "computed" <+> ppr yTVar <+> text "=:=" <+> ppr y0)
+
+       ; return $ mergePluginWork acc ([(API.evCoercion (mkCoercion API.Nominal y y0), ct)]
+                                       , []
+                                       , [])
+       }
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
                    return acc
 
 
 -- Some constraint solving just results to having identity functions as evidence
+-- This might change in the future as we may have some involved procedure
+-- to manipuate dictonary evidences
 mkIdFunEvTerm :: Type -> API.EvTerm
 mkIdFunEvTerm predTy = API.evCast (mkCoreLams [a, x] (Var x)) co
   where
@@ -363,15 +400,14 @@ tcPluginStop _ = do
 
 -- We have to possibly rewrite ~+~ type family applications
 tcPluginRewrite :: PluginDefs -> API.UniqFM API.TyCon API.TcPluginRewriter
-tcPluginRewrite defs@(PluginDefs {rowPlusTF, allTF}) = API.listToUFM [ (rowPlusTF, rewrite_rowplus defs)
-                                                                   -- , (rTyCon, intercept_tyfam defs)
-                                                                     , (allTF, rewrite_allTF defs)
-                                                                     ]
+tcPluginRewrite defs@(PluginDefs {..}) = API.listToUFM [ (rowPlusTF, rewrite_rowplus defs)
+                                                       , (allTF, rewrite_allTF defs)
+                                                       ]
 
 -- | Template interceptor for a type family tycon
 -- intercept_tyfam :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
 -- intercept_tyfam (PluginDefs { .. }) givens tys
---   = do API.tcPluginTrace "--Plugin RowConcatRewrite TF--" (vcat [ ppr givens $$ ppr tys ])
+--   = do API.tcPluginTrace "--Plugin Eq TF--" (vcat [ ppr givens $$ ppr tys ])
 --        pure API.TcPluginNoRewrite
 
 
