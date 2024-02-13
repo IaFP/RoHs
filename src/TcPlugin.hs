@@ -16,7 +16,6 @@ import GHC.Utils.Outputable
 import qualified GHC.TcPlugin.API as API
 import qualified GHC.TcPluginM.Extra as API hiding (newWanted)
 import GHC.Core.TyCo.Rep
-import GHC.TcPlugin.API ( TcPluginErrorMessage(..) )
 
 import GHC.Core
 import GHC.Core.Make
@@ -228,10 +227,10 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
                                                                                               , ppr x, ppr z, ppr y, ppr ys
                                                                                               , text "computed" <+> ppr y <+> text "=:=" <+> ppr y0
                                                                                               ])
-
-                 ; return $ mergePluginWork acc ([ (API.evCoercion $ mkCoercion API.Nominal (API.substType [(yTVar, y0)] predTy) predTy
+                 ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
+                 ; return $ mergePluginWork acc ([ ( mkIdFunEvTerm predTy
                                                    , ct) ]
-                                                 , [] -- no new wanteds
+                                                 , [API.mkNonCanonical nw] -- no new wanteds
                                                  , [(yTVar, y0)] -- new equalilites
                                                  ) }
          else return $ mergePluginWork acc ([], [ct], [])
