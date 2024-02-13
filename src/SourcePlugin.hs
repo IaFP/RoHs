@@ -40,6 +40,7 @@ addPlusConstraints _options gblEnv grp =
      grp'' <- everywhereM (mkM (xformE rowPlusName plusPredicateName)) grp'
      return (gblEnv, grp')
 
+-- | Top level function to transform the type signature
 xformSignatures :: Name -> Name -> LSig GhcRn -> TcM (LSig GhcRn)
 xformSignatures rowPlusName plusPredicateName (L sigLoc (TypeSig tsext ids (HsWC wcext (L sigTypeLoc sigType@(HsSig {}))))) =
   do sig_body' <- xformT rowPlusName plusPredicateName (sig_body sigType)
@@ -47,6 +48,7 @@ xformSignatures rowPlusName plusPredicateName (L sigLoc (TypeSig tsext ids (HsWC
 xformSignatures _ _ sig =
   do return sig
 
+-- | Top level function to transform the declaration body as it may contain type signatures
 xformE :: Name -> Name -> HsExpr GhcRn -> TcM (HsExpr GhcRn)
 xformE rowPlus plusPredicateName (ExprWithTySig ext exp (HsWC wcext (L sigTypeLoc sigType@(HsSig {})))) =
   do body' <- xformT rowPlus plusPredicateName (sig_body sigType)
@@ -62,7 +64,7 @@ xformT rowPlus plusPredicateName t =
           -- it to a qualified type, but I'm not 100% sure how this will work
           -- out...
           do let t'' = L loc (HsQualTy NoExtField (L (SrcSpanAnn EpAnnNotUsed srcSpan) preds) t')
-             traceRn "3 adding predicates to type:" (cat [ppr t, text " ==> ", ppr t''])
+             traceRn "3 adding predicates to type (no quantifiers):" (cat [ppr t, text " ==> ", ppr t''])
              return t''
 
 type CollectM = WriterT (HsContext GhcRn) TcM
@@ -72,7 +74,9 @@ collect rowPlusName plusPredicateName = collectL where
 
   collectT :: HsType GhcRn -> CollectM (HsType GhcRn)
   collectT (HsForAllTy NoExtField tele body@(L typeLoc _)) =
-    do (body', preds) <- listen $ collectL body
+    do (body', preds) <- censor (const []) $ listen (collectL body)
+       lift (traceRn ("999 At " ++ showSDocUnsafe (ppr typeLoc) ++ " found a signature") (vcat [ text "body:" <+> ppr body'
+                                                                                               , text "preds:" <+> ppr preds]))
        return (HsForAllTy NoExtField tele (L typeLoc (HsQualTy NoExtField (L (SrcSpanAnn EpAnnNotUsed (locA typeLoc)) preds) body')))
   collectT (HsQualTy NoExtField ctxt body) =
     HsQualTy NoExtField <$> collectC ctxt <*> collectL body

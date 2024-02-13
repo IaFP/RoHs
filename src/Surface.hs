@@ -3,7 +3,7 @@
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHsPlugin #-}
-{-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHsPlugin #-}
+{-# OPTIONS -fforce-recomp -ddump-rn-trace -ddump-tc-trace -dcore-lint -fplugin RoHsPlugin #-}
 
 module Surface where
 
@@ -21,7 +21,6 @@ foo = labR0 @"x" (1 :: Int) `cat0` labR0 @"y" True
 foo1 :: R0 x -> R0 y -> R0 (x ~+~ y)
 foo1 r s = r `cat0` s
 
-
 -- (1) foo :: R0 (R '["x" := Int, "x" := Bool])) -- user written
 
 -- (2) foo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool])) -- src plugin
@@ -32,7 +31,6 @@ foo1 r s = r `cat0` s
 -- For now user cannot write Plus x y z. \tau type signatures.
 -- foo_works :: forall z. Plus (R '["x" := Int]) ((R '["y" := Bool])) z => R0 z
 -- foo_works =  (labR0 @"x" (1::Int)) `cat0` (labR0 @"y" (False::Bool))
-
 
 -- Well this is potentially annoying...
 
@@ -166,15 +164,16 @@ showV :: forall {s} {u} {y}. (All Show (R '[ s := u ] ~+~ y)) => V0 (R '[ s := u
 showV = anaA0 @Show (const show)
 
 
-anaA1 :: forall c {s} {u} {y} {t} {f}.
-         (All c (R '[s := f] ~+~ y), c f)
-      => (Proxy s -> f u -> t) -- Proxy!? see `fmapV` below
-      -> V1 (R '[s := f] ~+~ y) u -> t
+anaA1 :: forall c {z} {t} {u}.
+         (All c z)
+      => (forall s y {f}. (R '[ s := f ] ~+~ y ~ z, c f)
+                       => Proxy s -> f u -> t) -- Proxy!? see `fmapV` below
+      -> V1 z u -> t
 anaA1 _ = undefined
 
 
 showV1 :: All Show (R '[ s := u ] ~+~ y) => V0 (R '[ s := u ] ~+~ y) -> String
-showV1 = anaA0 @Show f -- ANI: should this be V1?
+showV1 = anaA0 @Show f -- ANI: should this be V1? No. Its version 1, not varient 1 (:
   where f _ x = show x
 
 -- But apparently adding the type signature will make `f` no longer have the
@@ -202,9 +201,9 @@ eqV v w = anaA0 @Eq g w where
   g _ x = (case0 @s (\y -> x == y) `brn0` const False) v
 
 
-fmapV :: forall s u y {a} {b}.
-         (Functor u, All Functor (R '[ s := u ] ~+~ y))
-      => (a -> b) -> V1 (R '[ s := u ] ~+~ y) a -> V1 (R '[ s := u ] ~+~ y) b
+fmapV :: forall a b z.
+         (All Functor z)
+      => (a -> b) -> V1 z a  -> V1 z b
 fmapV f = anaA1 @Functor g where
 
   -- Without the `Proxy s` argument, `g` types fine but doesn't play well as n
@@ -212,8 +211,8 @@ fmapV f = anaA1 @Functor g where
 
   -- Can't get away without the type annotation here... even if I try to pattern
   -- match on the proxy.  Let's pretend I understand anything.
-  -- g :: forall s y u f a b. (Functor f)
-  --                 => Proxy s -> f a -> V1 (R '[ s := u ] ~+~ y) b
+  g :: forall s y f. (Functor f, R '[ s := f] ~+~ y ~ z)
+                  => Proxy s -> f a -> V1 z b
   g _ x = con1 @s (fmap f x)
 
 -- This should be enough to do something dumb.  Let's try....
@@ -231,7 +230,6 @@ type SmallR = R '["Const" := ZeroF Int] ~+~ R '["Add" := TwoF]
 type BigR = R '["Double" := OneF] ~+~ SmallR
 
 
-{-
 desugar' :: -- forall bigr smallr.
             -- (-- These are essentially part of the type
             --  Plus (R '["Double" := OneF]) smallr bigr,
@@ -239,9 +237,11 @@ desugar' :: -- forall bigr smallr.
             --  R '["Add" := TwoF] ~<~ smallr
             -- ) =>
             -- Mu (V1 bigr) -> Mu (V1 smallr)
-            forall y.
-            (All Functor (R '["Add" := TwoF] ~+~ y))
-         => Mu (V1 ((R '["Double" := OneF]) ~+~ (R '["Add" := TwoF] ~+~ y))) -> Mu (V1 (R '["Add" := TwoF] ~+~ y))
+            forall smallr bigr.
+            (All Functor smallr
+            , R '["Double" := OneF] ~+~ smallr ~ bigr
+            , R '["Add" := TwoF] ~<~ smallr)
+         => Mu (V1 bigr) -> Mu (V1 smallr)
 
 desugar' (Wrap e) = Wrap ((double `brn1` (fmapV desugar' . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar' x) (desugar' x)))
@@ -251,4 +251,3 @@ desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
 -- desugar = desugar'
 desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
--}
