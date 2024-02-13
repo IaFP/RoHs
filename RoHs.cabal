@@ -68,8 +68,7 @@ library
                       RoHsPlugin
                       SourcePlugin
                       TcPlugin
-
-                      RoHsCorePlugin
+                      CorePlugin
 
 
     -- Modules included in this library but not exported.

@@ -14,8 +14,16 @@ import qualified GHC.TcPlugin.API as API
 
 import qualified SourcePlugin as SP (addPlusConstraints)
 import qualified TcPlugin as TP (tcPlugin)
+import qualified CorePlugin as CP (install)
 
 -- TODOs: (DONE) The plugin should enable replacing class Common.Plus with Common.(~+~)
+--                    The user writes x ~+~ y and the source plugin converts it to Plus constraints
+--                    BUG: (t -> (forall m x. m ~+~ x ~ z => p) -> g) shouldn't get converted to (Plux m x z) => (t -> ... -> g)
+--                         i.e. make sure variables don't escape their scope
+--        (DONE) Solving those `Plus` constraints.
+--                    It also computes the right unknown meta variable
+--                    Eg. `Plus (x:=t) y0 ( x:=t , y := u )` will deduce y0 ~ y := u
+--
 --               Internalize the representations of `labX` `unLabX` primitives
 
 plugin :: GHC.Plugin
@@ -24,4 +32,5 @@ plugin =
     { GHC.tcPlugin        = \ _args -> Just $ API.mkTcPlugin TP.tcPlugin
     , GHC.pluginRecompile = GHC.purePlugin
     , GHC.renamedResultAction = SP.addPlusConstraints
+    , GHC.installCoreToDos = CP.install
     }

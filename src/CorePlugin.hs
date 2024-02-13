@@ -1,11 +1,6 @@
-module RoHsCorePlugin (plugin) where
+module CorePlugin (install) where
 import GHC.Plugins
 
-
-plugin :: Plugin
-plugin = defaultPlugin {
-  installCoreToDos = install
-  }
 
 install :: [CommandLineOption] -> [CoreToDo] -> CoreM [CoreToDo]
 install _ todo = do
