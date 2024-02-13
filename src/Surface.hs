@@ -155,10 +155,10 @@ anaA0 :: -- forall c {z} {t}.
       --    (forall s y {u}. (Plus (R '[s := u]) y z, c u) =>
       --                      Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
       -- -> V0 z -> t
-         forall c {s} {u} {y} {t}.
-         (All c (R '[s := u] ~+~ y))
-      => (c u => Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
-      -> V0 ((R '[s := u]) ~+~ y) -> t
+         forall c {z} {t}.
+         (All c z)
+      => (forall s {u} {y}. (c u, ((R '[s := u]) ~+~ y ~ z)) => Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
+      -> V0 z -> t
 anaA0 _ = undefined
 
 
@@ -193,12 +193,12 @@ showV1 = anaA0 @Show f -- ANI: should this be V1?
 -- constants = ana0 f where
 --   f x = con0 (\y -> x)
 
--- eqV :: forall z. All Eq z => V0 z -> V0 z -> Bool
-eqV :: forall s u y.
-       (Eq u, All Eq (R '[ s := u ] ~+~ y))
-    => V0 (R '[ s := u ] ~+~ y) -> V0 (R '[ s := u ] ~+~ y) -> Bool
+eqV :: forall z. All Eq z => V0 z -> V0 z -> Bool
+-- eqV :: forall s u y.
+--        (Eq u, All Eq z)
+--     => V0 (R '[ s := u ] ~+~ y) -> V0 (R '[ s := u ] ~+~ y) -> Bool
 eqV v w = anaA0 @Eq g w where
-  -- g :: forall (s :: Label) y u. Eq u =>  Proxy s -> u -> Bool
+  g :: forall (s :: Label) y u. (Eq u, ((R '[ s := u ]) ~+~ y ~ z)) =>  Proxy s -> u -> Bool
   g _ x = (case0 @s (\y -> x == y) `brn0` const False) v
 
 
@@ -226,10 +226,12 @@ data TwoF a    = C2 a a
 
 newtype Mu f = Wrap {unwrap :: f (Mu f)}
 
-type BigR = R '["Const" := ZeroF Int] ~+~  R '["Add" := TwoF] ~+~ R '["Double" := OneF]
+
 type SmallR = R '["Const" := ZeroF Int] ~+~ R '["Add" := TwoF]
+type BigR = R '["Double" := OneF] ~+~ SmallR
 
 
+{-
 desugar' :: -- forall bigr smallr.
             -- (-- These are essentially part of the type
             --  Plus (R '["Double" := OneF]) smallr bigr,
@@ -237,14 +239,13 @@ desugar' :: -- forall bigr smallr.
             --  R '["Add" := TwoF] ~<~ smallr
             -- ) =>
             -- Mu (V1 bigr) -> Mu (V1 smallr)
-            forall smallr.
-            All Functor (R '["Add" := TwoF] ~+~ smallr)
-         =>
-            Mu (V1 ((R '["Double" := OneF]) ~+~ smallr)) -> Mu (V1 smallr)
+            forall y.
+            (All Functor (R '["Add" := TwoF] ~+~ y))
+         => Mu (V1 ((R '["Double" := OneF]) ~+~ (R '["Add" := TwoF] ~+~ y))) -> Mu (V1 (R '["Add" := TwoF] ~+~ y))
 
 desugar' (Wrap e) = Wrap ((double `brn1` (fmapV desugar' . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar' x) (desugar' x)))
-{-
+
 desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
 -- Here's a very explicit type...
 -- desugar = desugar'

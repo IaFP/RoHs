@@ -51,7 +51,7 @@ xformE :: Name -> Name -> HsExpr GhcRn -> TcM (HsExpr GhcRn)
 xformE rowPlus plusPredicateName (ExprWithTySig ext exp (HsWC wcext (L sigTypeLoc sigType@(HsSig {})))) =
   do body' <- xformT rowPlus plusPredicateName (sig_body sigType)
      return (ExprWithTySig ext exp (HsWC wcext (L sigTypeLoc sigType { sig_body = body'})))
-xformE _ _ e = return e     
+xformE _ _ e = return e
 
 xformT :: Name -> Name -> LHsType GhcRn -> TcM (LHsType GhcRn)
 xformT rowPlus plusPredicateName t =
@@ -119,11 +119,11 @@ collect rowPlusName plusPredicateName = collectL where
   collectT (HsExplicitTupleTy ext tys) =
     HsExplicitTupleTy ext <$> mapM collectL tys
   collectT t = return t
-    -- HsTyVar _ _ _ 
+    -- HsTyVar _ _ _
     -- HsStarTy _ _
     -- HsTyLit _ _
     -- HsWildCardTy _
-    -- XXType    ... 
+    -- XXType    ...
 
   collectC :: LHsContext GhcRn -> CollectM (LHsContext GhcRn)
   collectC (L ann preds) = L ann <$> mapM collectL preds
