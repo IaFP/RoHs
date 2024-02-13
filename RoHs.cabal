@@ -53,9 +53,9 @@ extra-doc-files:    CHANGELOG.md
 
 common ghcopts
     ghc-options: -Wall
-                 -ddump-rn-trace
-                 -ddump-tc-trace
-                 -dcore-lint
+                 -- -ddump-rn-trace
+                 -- -ddump-tc-trace
+                 -- -dcore-lint
 
 library
     -- Import common warning flags.
@@ -63,6 +63,8 @@ library
 
     -- Modules exported by the library.
     exposed-modules:  Surface
+
+                      RoHsPrimitives
                       Common
                       -- Example
                       RoHsPlugin
