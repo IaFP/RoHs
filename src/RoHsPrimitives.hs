@@ -4,7 +4,10 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHsPlugin #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHsPlugin #-}
-{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHsPlugin #-}
+-- {-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHsPlugin #-}
+
+-- For now do not run the plugin on the primitives file,
+-- becuase they are well, primitives
 module RoHsPrimitives where
 
 import Common

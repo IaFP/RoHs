@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module CorePlugin (install) where
 
 import GHC.Plugins
@@ -12,13 +13,50 @@ import Data.Set (Set)
 import Data.Map as Map
 import Data.Map (Map)
 
+-- TODO: Why is this core plugin being called twice?
 
-primMap :: Map String CoreExpr
+
+
+{-
+The plugin portion that gives real meanings to undefined terms.
+
+It makes a traveral over the generated compiler core and replaces
+each primitive mentioned in the `primMap` with the actual core expression.
+
+Optionally: Runs the simplifier after the replacement
+to see if any simplifications can be made to the core term structure
+to have efficient (space and time) during the runtime phase.
+
+-}
+
+type PrimMap = Map String (CoreM CoreExpr)
+
+primMap :: PrimMap
 primMap = Map.fromList [ ("labR0", labR0Core)
                      ]
 
-labR0Core :: CoreExpr
-labR0Core = error "undefined CoreExpr"
+
+-- | labR0 :: forall s {t}. s -> t -> R0 (R '[ s := t])
+--   labR0 = /\ s t. \ l v. ()
+labR0Core :: CoreM CoreExpr
+labR0Core = do return $ mkCoreLams bnds body
+  where
+
+    label = undefined "label"
+    labelName = undefined "labelName"
+
+    valueTy = undefined "valueTy"
+    value   = undefined "value"
+
+    bnds = [ label      -- s
+           , valueTy    -- t
+           , labelName  -- l :: s
+           , value      -- v :: t
+           ]
+    body = mkBigCoreTup [ Lit $ mkLitInt8 1 -- single tuple
+                        , mkBigCoreTup [ label ]
+                        , mkBigCoreTup [ value ]
+                        ]
 
 
 
@@ -44,4 +82,10 @@ install opts todo = case find findSamePass todo of       -- check that we don't 
 --   Theoritically, the safety-ness criteria comes from the GHC Typechecker and TcPlugin
 --   The implementation correctness is well: ¯\_(ツ)_/¯
 insertRoHsSemantics :: RoHsPluginOptions -> ModGuts -> CoreM ModGuts
-insertRoHsSemantics _ mgs = do {putMsgS "Hello!"; return mgs}
+insertRoHsSemantics _ mgs@ModGuts{..} = do {putMsg (text "Hello from" <+> (ppr $ moduleName mg_module))
+                               ; mg_binds' <- transformBinds primMap mg_binds
+                               ; return $ mgs{mg_binds = mg_binds'}}
+
+
+transformBinds :: PrimMap -> CoreProgram -> CoreM CoreProgram
+transformBinds _ x = do {putMsgS "--CorePlugin: transforming binds--"; return x}
