@@ -3,9 +3,9 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 
-{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHsPlugin #-}
+{-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHsPlugin #-}
 
-module RoHsLib (con0, case0, con1, case1
+module RoHsLib (con0, case0, con1, case1, mkIntRow
 
                , module RoHsPrimitives
                ) where
@@ -17,6 +17,7 @@ It also exports the Primitives, so no need for users to explicitly import it aga
 
 import Common
 import RoHsPrimitives
+
 
 -- and we can define
 
@@ -31,3 +32,6 @@ con1 x = inj1 (labV1 @s x)
 
 case1 :: forall s {f} {t} {u}. (f t -> u) -> V1 (R '[s := f]) t -> u
 case1 f = f . unlabV1
+
+mkIntRow :: R0 (R '["x" := Int])
+mkIntRow = labR0 @"x" (3::Int)

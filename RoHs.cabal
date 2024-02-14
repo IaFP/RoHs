@@ -64,14 +64,14 @@ library
     -- Modules exported by the library.
     exposed-modules:  Common
                       RoHsPrimitives
-                      RoHsLib
 
                       RoHsPlugin
                       SourcePlugin
                       TcPlugin
                       CorePlugin
 
-                      Surface
+                      RoHsLib
+                      -- Surface
                       -- Example
 
     -- Modules included in this library but not exported.

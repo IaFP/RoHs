@@ -375,7 +375,7 @@ mkIdFunEvTerm predTy = API.evCast (mkCoreLams [a, x] (Var x)) co
     co = mkCoercion API.Representational idTy predTy
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
-mkCoercion = API.mkPluginUnivCo "Proven by Le RoHsPlugin"
+mkCoercion = API.mkPluginUnivCo "Proven by RoHs.TcPlugin"
 
 -- If you get a list of assocs, flatten it out
 unfold_list_type_elems :: API.TcType -> [API.TcType]
