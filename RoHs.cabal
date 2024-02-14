@@ -85,7 +85,8 @@ library
                       ghc-tcplugin-api ^>= 0.11.0.0,
                       mtl ^>= 2.3,
                       ghc-tcplugins-extra ^>= 0.4.5,
-                      syb ^>= 0.7
+                      syb ^>= 0.7,
+                      containers
     -- Directories containing source files.
     hs-source-dirs:   src
 

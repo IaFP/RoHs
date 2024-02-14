@@ -3,7 +3,7 @@
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHsPlugin #-}
-{-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHsPlugin #-}
+{-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -ddump-ds -fplugin RoHsPlugin #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHsPlugin #-}
 
 module Surface where
@@ -14,7 +14,6 @@ import RoHsPrimitives
 import Data.Proxy
 
 -- See if we can do anything
-
 foo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool]))
 foo = labR0 @"x" (1 :: Int) `cat0` labR0 @"y" True
 
@@ -33,7 +32,6 @@ foo_works :: Plus (R '["x" := Int]) ((R '["y" := Bool])) z => R0 z
 foo_works =  (labR0 @"x" (1::Int)) `cat0` (labR0 @"y" (False::Bool))
 
 --
-
 bar :: (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
 bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 

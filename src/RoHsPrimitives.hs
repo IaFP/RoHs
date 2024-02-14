@@ -30,7 +30,7 @@ import Data.Proxy
 
 
 -- Well this is potentially annoying...
-
+{-# NoINLINE labR0 #-}
 labR0 :: forall s {t}. t -> R0 (R '[s := t])
 labR0 = undefined
 
