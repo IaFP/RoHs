@@ -38,7 +38,7 @@ addPlusConstraints _options gblEnv grp =
      plusPredicateName <- runTcPluginM (lookupOrig commonModule (mkTcOcc "Plus"))
      grp' <- everywhereM (mkM (xformSignatures rowPlusName plusPredicateName)) grp
      grp'' <- everywhereM (mkM (xformE rowPlusName plusPredicateName)) grp'
-     return (gblEnv, grp')
+     return (gblEnv, grp'')
 
 -- | Top level function to transform the type signature
 xformSignatures :: Name -> Name -> LSig GhcRn -> TcM (LSig GhcRn)
@@ -50,9 +50,9 @@ xformSignatures _ _ sig =
 
 -- | Top level function to transform the declaration body as it may contain type signatures
 xformE :: Name -> Name -> HsExpr GhcRn -> TcM (HsExpr GhcRn)
-xformE rowPlus plusPredicateName (ExprWithTySig ext exp (HsWC wcext (L sigTypeLoc sigType@(HsSig {})))) =
+xformE rowPlus plusPredicateName (ExprWithTySig ext expr (HsWC wcext (L sigTypeLoc sigType@(HsSig {})))) =
   do body' <- xformT rowPlus plusPredicateName (sig_body sigType)
-     return (ExprWithTySig ext exp (HsWC wcext (L sigTypeLoc sigType { sig_body = body'})))
+     return (ExprWithTySig ext expr (HsWC wcext (L sigTypeLoc sigType { sig_body = body'})))
 xformE _ _ e = return e
 
 xformT :: Name -> Name -> LHsType GhcRn -> TcM (LHsType GhcRn)
@@ -80,7 +80,7 @@ collect rowPlusName plusPredicateName = collectL where
        return (HsForAllTy NoExtField tele (L typeLoc (HsQualTy NoExtField (L (SrcSpanAnn EpAnnNotUsed (locA typeLoc)) preds) body')))
   collectT (HsQualTy NoExtField ctxt body) =
     HsQualTy NoExtField <$> collectC ctxt <*> collectL body
-  collectT t@(HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L _ (HsTyVar _ NotPromoted (L _ name))) lhs)) rhs)
+  collectT t@(HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L _ (HsTyVar _ NotPromoted (L _ name))) _)) _)
     | name == rowPlusName =
       do lift (traceRn ("1 At " ++ showSDocUnsafe (ppr srcloc) ++ " found use of ~+~:") (ppr t))
          return t
@@ -90,13 +90,13 @@ collect rowPlusName plusPredicateName = collectL where
     HsAppKindTy ext <$> collectL fun <*> collectL arg
   collectT (HsFunTy ext arr dom cod) =
     HsFunTy ext arr <$> collectL dom <*> collectL cod
-  collectT (HsListTy ext elem) =
-    HsListTy ext <$> collectL elem
+  collectT (HsListTy ext elems) =
+    HsListTy ext <$> collectL elems
   collectT (HsTupleTy ext sort elems) =
     HsTupleTy ext sort <$> mapM collectL elems
   collectT (HsSumTy ext ts) =   -- Btw, what is this?
     HsSumTy ext <$> mapM collectL ts
-  collectT t@(HsOpTy ext NotPromoted lhs@(L srcloc _) (L nameloc name) rhs)
+  collectT t@(HsOpTy _ NotPromoted lhs@(L srcloc _) (L nameloc name) rhs)
     | name == rowPlusName =
       do let p = L srcloc (HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L srcloc (HsTyVar EpAnnNotUsed NotPromoted (L nameloc plusPredicateName))) lhs)) rhs)) (L srcloc t)) -- lying about source location here
          lift (traceRn "2 Emitting constraint" (ppr p))
@@ -110,13 +110,13 @@ collect rowPlusName plusPredicateName = collectL where
     HsIParamTy ext name <$> collectL ty
   collectT (HsKindSig ext ty k) =
     HsKindSig ext <$> collectL ty <*> collectL k
-  collectT (HsSpliceTy ext _) =
+  collectT (HsSpliceTy {}) =
     undefined -- missing some bits here
   collectT (HsDocTy ext ty doc) =
     HsDocTy ext <$> collectL ty <*> pure doc
   collectT (HsBangTy ext bang ty) =
     HsBangTy ext bang <$> collectL ty
-  collectT (HsRecTy ext fields) =
+  collectT (HsRecTy{}) =
     undefined -- TODO: look up field types
   collectT (HsExplicitListTy ext promoted tys) =
     HsExplicitListTy ext promoted <$> mapM collectL tys
