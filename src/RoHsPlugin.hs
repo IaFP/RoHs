@@ -18,7 +18,7 @@ import qualified CorePlugin as CP (install)
 
 -- TODOs: (DONE) The plugin should enable replacing class Common.Plus with Common.(~+~)
 --                    The user writes x ~+~ y and the source plugin converts it to Plus constraints
---                    BUG: (t -> (forall m x. m ~+~ x ~ z => p) -> g) shouldn't get converted to (Plux m x z) => (t -> ... -> g)
+--                    BUG (FIXED): (t -> (forall m x. m ~+~ x ~ z => p) -> g) shouldn't get converted to (Plux m x z) => (t -> ... -> g)
 --                         i.e. make sure variables don't escape their scope
 --        (DONE) Solving those `Plus` constraints.
 --                    It also computes the right unknown meta variable
