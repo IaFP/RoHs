@@ -9,7 +9,7 @@
 module Surface where
 
 import Common
-import RoHsPrimitives
+import RoHsLib
 
 import Data.Proxy
 

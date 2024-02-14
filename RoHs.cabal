@@ -62,16 +62,17 @@ library
     import:           ghcopts
 
     -- Modules exported by the library.
-    exposed-modules:  Surface
-
+    exposed-modules:  Common
                       RoHsPrimitives
-                      Common
-                      -- Example
+                      RoHsLib
+
                       RoHsPlugin
                       SourcePlugin
                       TcPlugin
                       CorePlugin
 
+                      Surface
+                      -- Example
 
     -- Modules included in this library but not exported.
     -- other-modules:

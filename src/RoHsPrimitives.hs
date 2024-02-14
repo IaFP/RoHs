@@ -92,20 +92,6 @@ brn0 = undefined
 brn1 :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
 brn1 = undefined
 
--- and we can define
-
-con0 :: forall s {t} {z}. R '[s := t] ~<~ z => t -> V0 z
-con0 x = inj0 (labV0 @s x)
-
-case0 :: forall s {t} {u}. (t -> u) -> V0 (R '[s := t]) -> u
-case0 f = f . unlabV0   -- I am surprised GHC can figure this out... and somewhat concerned about what it's actually figured out
-
-con1 :: forall s {f} {t} {z}. R '[s := f] ~<~ z => f t -> V1 z t
-con1 x = inj1 (labV1 @s x)
-
-case1 :: forall s {f} {t} {u}. (f t -> u) -> V1 (R '[s := f]) t -> u
-case1 f = f . unlabV1
-
 
 ana0 :: forall z t.
         (forall s y {u}. (Plus (R '[s := u]) y z) => u -> t) ->
