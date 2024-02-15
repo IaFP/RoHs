@@ -38,6 +38,7 @@ bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 bar1 ::(V0 (R '["false" := Bool] ~+~ R '["true" := Int])) -> Int
 bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
+
 -- This is a *less* compelling argument against than I thought, but still
 -- concerned about the type argument to inj0.
 -- bar2 :: forall z y.

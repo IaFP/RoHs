@@ -5,7 +5,7 @@
 
 {-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHsPlugin #-}
 
-module RoHsLib (con0, case0, con1, case1, mkIntRow
+module RoHsLib (con0, case0, con1, case1
 
                , module RoHsPrimitives
                ) where
@@ -32,6 +32,3 @@ con1 x = inj1 (labV1 @s x)
 
 case1 :: forall s {f} {t} {u}. (f t -> u) -> V1 (R '[s := f]) t -> u
 case1 f = f . unlabV1
-
-mkIntRow :: R0 (R '["x" := Int])
-mkIntRow = labR0 @"x" (3::Int)

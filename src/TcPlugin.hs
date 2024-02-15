@@ -22,14 +22,17 @@ import GHC.Core.Make
 import GHC.Core.Type
 import GHC.Core.Predicate
 
-import Data.List (sortBy)
-import Data.Foldable (foldlM)
-
 import GHC.Types.Name      ( mkInternalName, tcName )
 import GHC.Types.Name.Occurrence   ( mkOccName )
 import GHC.Types.Unique
 import GHC.Types.SrcLoc
 import GHC.Builtin.Types
+
+
+
+import Data.List (sortBy)
+import Data.Foldable (foldlM)
+import Data.Maybe
 
 -- The point of this exercise it to show that the GHCs injective type families (implementation, the very least)
 -- not as expressive as it should be
@@ -433,29 +436,43 @@ rewrite_allTF (PluginDefs { .. }) _givens tys
 rewrite_rowplus :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
 rewrite_rowplus (PluginDefs { .. }) _givens tys
   | [_, a, b] <- tys
-  = if
-      | Just (_ , [ka, arg_a]) <- API.splitTyConApp_maybe a
-      , Just (_ , [kb, arg_b]) <- API.splitTyConApp_maybe b
-      , assocs_a <- unfold_list_type_elems arg_a
-      , assocs_b <- unfold_list_type_elems arg_b
-      , API.eqType ka kb
-      , let concat_assocs = sortAssocs $ assocs_a ++ assocs_b
-            rowAssocKi = mkTyConApp rowAssocTyCon [ka]
-      -> do API.tcPluginTrace "--Plugin RowConcatRewrite (~+~)--" (vcat [ text "args_a:" <+> ppr assocs_a
-                                                                  , text "args_b:" <+> ppr assocs_b
-                                                                  , text "args:"   <+> ppr concat_assocs
-                                                                  , text "givens:" <+> ppr _givens
-                                                                  ]
-                                                            )
-            pure $ API.TcPluginRewriteTo
+  , Just (_ , [ka, arg_a]) <- API.splitTyConApp_maybe a
+  , Just (_ , [kb, arg_b]) <- API.splitTyConApp_maybe b
+  , assocs_a <- unfold_list_type_elems arg_a
+  , assocs_b <- unfold_list_type_elems arg_b
+  , API.eqType ka kb
+  , let rowAssocKi = mkTyConApp rowAssocTyCon [ka]
+  = do { let inter = setIntersect assocs_a assocs_b
+       ; if null inter
+         then do { let concat_assocs = sortAssocs $ assocs_a ++ assocs_b
+                 ; API.tcPluginTrace "--Plugin RowConcatRewrite (~+~)--" (vcat [ text "args_a:" <+> ppr assocs_a
+                                                                     , text "args_b:" <+> ppr assocs_b
+                                                                     , text "args:"   <+> ppr concat_assocs
+                                                                     , text "givens:" <+> ppr _givens
+                                                                     ])
+                 ; return $ API.TcPluginRewriteTo
                            (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal rowPlusTF tys
                                (API.mkTyConApp rTyCon [ka, mkPromotedListTy rowAssocKi concat_assocs]))
                            []
-      | otherwise
-      -> pure API.TcPluginNoRewrite
+                 }
+         else API.pprPanic "Rohs Plugin" (vcat [text "Cannot concatinate rows"
+                                           , ppr a, text "with",  ppr b, text "common labels:" <+> ppr (getLabels inter)])
+       }
   | otherwise
   = do API.tcPluginTrace "other tyfam" (ppr tys)
        pure API.TcPluginNoRewrite
+
+
+
+-- | get labels from an assoc
+getLabel :: API.TcType -> Maybe API.Type
+getLabel ty | Just (_, [_, LitTy lbl_l, _]) <- API.splitTyConApp_maybe ty
+            = Just (LitTy lbl_l)
+            | otherwise = Nothing
+
+
+getLabels :: [API.TcType] -> [API.Type]
+getLabels = catMaybes . fmap getLabel
 
 
 ---- The worlds most efficient set operations below ---
@@ -482,6 +499,14 @@ setDiff xs ys = setDiff_inner [] xs ys
     setDiff_inner acc _ [] = acc
     setDiff_inner acc xs' (y : ys') | any (API.eqType y) xs' = setDiff_inner acc xs' ys'
                                     | otherwise = setDiff_inner (y:acc) xs' ys'
+
+-- computes the set interction of two rows
+setIntersect :: [Type] -> [Type] -> [Type]
+setIntersect xs ys = if length xs > length ys then set_intersection [] xs ys else set_intersection [] ys xs
+  where
+    set_intersection acc [] _ = acc
+    set_intersection acc (x:xs') ys' | any (\y -> EQ == eqAssoc x y) ys' = set_intersection (x:acc) xs' ys'
+                                    | otherwise = set_intersection acc xs' ys
 
 -- At this point i'm just sorting on the kind of the type which happens to be a string literal, Sigh ...
 cmpAssoc :: API.TcType -> API.TcType -> Ordering

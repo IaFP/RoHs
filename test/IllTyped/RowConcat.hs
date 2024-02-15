@@ -3,16 +3,15 @@
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
-
-{-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHsPlugin #-}
--- {-# OPTIONS -fforce-recomp -fplugin RoHsPlugin #-}
+{-# OPTIONS -fforce-recomp -fplugin RoHsPlugin #-}
 
 
-module Main where
+module IllTyped.RowConcat (main) where
 
 import Common
 import RoHsLib
 
+import GHC.Types
 
 s1 :: R0 (R '["x" := Int])
 s1 = labR0 @"x" (1::Int)
@@ -24,6 +23,10 @@ s2 = labR0 @"x" (True::Bool)
 same_labels :: R0 (R '["x" := Int] ~+~ (R '["x" := Bool]))
 same_labels = s1 `cat0` s2
 
+-- curried_lables :: forall (y :: Row Type).  y -> R0 (R '["x" := Int] ~+~ y)
+-- curried_lables y = s1 `cat0` y
+
+-- should_fail = curried_lables `cat0` s2
 
 main :: IO ()
-main = putStrLn "Test suite not yet implemented."
+main = putStrLn "should get printed"
