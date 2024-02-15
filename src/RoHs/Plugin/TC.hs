@@ -538,9 +538,7 @@ throwTypeError badRedn msg = do
 
 
 
--- else API.pprPanic "Rohs Plugin" (vcat [text "Cannot concatinate rows"
---                                   , ppr a, text "with",  ppr b, text "common labels:" <+> ppr (getLabels inter)])
-
+-- | Make the error message to be raised when two rows cannot be concatinated
 mkSameLableError :: Type -> Type -> [Type] -> TcPluginErrorMessage
 mkSameLableError r1 r2 common = Txt "Cannot concat rows"
                          :-: (PrintType r1)

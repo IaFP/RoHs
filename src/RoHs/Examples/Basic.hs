@@ -3,8 +3,8 @@
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHsPlugin #-}
--- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -ddump-ds -fplugin RoHs.Plugin #-}
-{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -ddump-ds -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
 

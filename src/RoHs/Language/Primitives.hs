@@ -30,22 +30,62 @@ import Data.Proxy
 
 
 -- Well this is potentially annoying...
-{-# NoINLINE labR0 #-}
+{-# OPAQUE labR0 #-}
 labR0 :: forall s {t}. t -> R0 (R '[s := t])
 labR0 = undefined
 
+{-# OPAQUE unlabR0 #-}
 unlabR0 :: R0 (R '[s := t]) -> t
 unlabR0 = undefined
 
+{-# OPAQUE prj0 #-}
 prj0 :: forall z y. z ~<~ y => R0 y -> R0 z
 prj0 = undefined
 
+{-# OPAQUE cat0 #-}
 -- cat0 :: R0 y -> R0 z -> R0 (y ~+~ z)
 cat0 :: Plus y z x => R0 y -> R0 z -> R0 x
 cat0 _ _ = undefined
 
--- Sigh...
+{-# OPAQUE labV0 #-}
+labV0 :: forall s {t}. t -> V0 (R '[s := t])
+labV0 = undefined
 
+{-# OPAQUE brn0 #-}
+-- brn0 :: (V0 x -> t) -> (V0 y -> t) -> V0 (x ~+~ y) -> t
+brn0 :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
+brn0 = undefined
+
+{-# OPAQUE unlabV0 #-}
+unlabV0 :: V0 (R '[s := t]) -> t
+unlabV0 = undefined
+
+{-# OPAQUE inj0 #-}
+inj0 :: y ~<~ z => V0 y -> V0 z
+inj0 = undefined
+
+{-# OPAQUE ana0 #-}
+ana0 :: forall z t.
+        (forall s y {u}. (Plus (R '[s := u]) y z) => u -> t) ->
+        V0 z -> t
+ana0 _ = undefined
+
+{-# OPAQUE anaE0 #-}
+anaE0 :: forall phi {z} {t}.
+         (forall s y {u}. (Plus (R '[s := u]) y z) => phi u -> t) ->
+         V0 (Each phi z) -> t
+anaE0 _ = undefined
+
+{-# OPAQUE anaA0 #-}
+anaA0 :: forall c {z} {t}.
+         All c z =>
+         (forall s y {u}. (Plus (R '[s := u]) y z, c u) =>
+                           Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
+      -> V0 z -> t
+anaA0 _ = undefined
+
+
+-- Sigh...
 labR1 :: forall s {f} {t}. f t -> R1 (R '[s := f]) t
 labR1 = undefined
 
@@ -59,53 +99,19 @@ prj1 = undefined
 cat1 :: Plus y z x => R1 y t -> R1 z t -> R1 x t
 cat1 _ _ = undefined
 
-sel0 :: forall s {t} {z}. R '[s := t] ~<~ z => R0 z -> t
--- Perhaps we can use some of these at least...
-sel0 r = unlabR0 @s (prj0 r)
-
-labV0 :: forall s {t}. t -> V0 (R '[s := t])
-labV0 = undefined
-
 labV1 :: forall s {f} {t}. f t -> V1 (R '[s := f]) t
 labV1 = undefined
-
-unlabV0 :: V0 (R '[s := t]) -> t
-unlabV0 = undefined
 
 unlabV1 :: V1 (R '[s := f]) t -> f t
 unlabV1 = undefined
 
-inj0 :: y ~<~ z => V0 y -> V0 z
-inj0 = undefined
 
 inj1 :: y ~<~ z => V1 y t -> V1 z t
 inj1 = undefined
 
--- brn0 :: (V0 x -> t) -> (V0 y -> t) -> V0 (x ~+~ y) -> t
-brn0 :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
-brn0 = undefined
-
 -- brn1 :: (V1 x t -> u) -> (V1 y t -> u) -> V1 (x ~+~ y) t -> u
 brn1 :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
 brn1 = undefined
-
-
-ana0 :: forall z t.
-        (forall s y {u}. (Plus (R '[s := u]) y z) => u -> t) ->
-        V0 z -> t
-ana0 _ = undefined
-
-anaE0 :: forall phi {z} {t}.
-         (forall s y {u}. (Plus (R '[s := u]) y z) => phi u -> t) ->
-         V0 (Each phi z) -> t
-anaE0 _ = undefined
-
-anaA0 :: forall c {z} {t}.
-         All c z =>
-         (forall s y {u}. (Plus (R '[s := u]) y z, c u) =>
-                           Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
-      -> V0 z -> t
-anaA0 _ = undefined
 
 anaA1 :: forall c {z} {t} {u}.
          All c z =>

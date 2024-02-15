@@ -6,7 +6,7 @@
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHs.Plugin #-}
 {-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
 
-module RoHs.Language.Lib (con0, case0, con1, case1
+module RoHs.Language.Lib (con0, case0, sel0, con1, case1
 
                , module RoHs.Language.Primitives
                , module RoHs.Language.Types
@@ -28,6 +28,10 @@ con0 x = inj0 (labV0 @s x)
 
 case0 :: forall s {t} {u}. (t -> u) -> V0 (R '[s := t]) -> u
 case0 f = f . unlabV0   -- I am surprised GHC can figure this out... and somewhat concerned about what it's actually figured out
+
+
+sel0 :: forall s {t} {z}. R '[s := t] ~<~ z => R0 z -> t
+sel0 r = unlabR0 @s (prj0 r)
 
 con1 :: forall s {f} {t} {z}. R '[s := f] ~<~ z => f t -> V1 z t
 con1 x = inj1 (labV1 @s x)

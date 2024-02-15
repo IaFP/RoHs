@@ -29,9 +29,23 @@ type PrimMap = [(FastString, (Type -> CoreM CoreExpr))]
 
 primMap :: PrimMap
 primMap = [ (fsLit "labR0" , mkIdCore)
+          , (fsLit "unlabR0", mkIdCore)
+          , (fsLit "prj0", mkIdCore)
+          , (fsLit "cat0", mkIdCore)
+
+
+          , (fsLit "labV0", mkIdCore)
+          , (fsLit "brn0", mkIdCore)
+          , (fsLit "unlabV0", mkIdCore)
+          , (fsLit "inj0", mkIdCore)
+          , (fsLit "ana0", mkIdCore)
+          , (fsLit "anaE0", mkIdCore)
+          , (fsLit "anaA0", mkIdCore)
+
           ]
+
 mkCoercion :: Role -> Type -> Type -> Coercion
-mkCoercion = API.mkPluginUnivCo "Proven by RoHs.CorePlugin"
+mkCoercion = API.mkPluginUnivCo "RoHs.Plugin.Core"
 
 
 mkIdCore :: Type -> CoreM CoreExpr
