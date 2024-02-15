@@ -8,8 +8,7 @@
 
 module IllTyped.RowConcat (main) where
 
-import Common
-import RoHsLib
+import RoHs.Language.Lib
 
 s1 :: R0 (R '["x" := Int])
 s1 = labR0 @"x" (1::Int)

@@ -3,7 +3,8 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 
-{-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
 
 module RoHs.Language.Lib (con0, case0, con1, case1
 

@@ -14,6 +14,7 @@ import GHC.Utils.Outputable
 
 -- ghc-tcplugin-api
 import qualified GHC.TcPlugin.API as API
+import GHC.TcPlugin.API (TcPluginErrorMessage(..))
 import qualified GHC.TcPluginM.Extra as API hiding (newWanted)
 import GHC.Core.TyCo.Rep
 
@@ -73,7 +74,6 @@ data PluginDefs =
     , rowLeqCls        :: !API.Class -- standin for ~<~
     , rowPlusCls       :: !API.Class -- standin for Plus
     , functorCls       :: !API.Class -- standin for Functor
-    -- , primEqCls        :: !API.Class
     }
 
 
@@ -104,15 +104,11 @@ findTypesModule = findModule "RoHs.Language.Types" Nothing
 findPreludeModule :: API.MonadTcPlugin m => m API.Module
 findPreludeModule = findModule "GHC.Base" (Just "base")
 
--- findGhcPrimModule :: API.MonadTcPlugin m => m API.Module
--- findGhcPrimModule = findModule "GHC.Prim" (Just "ghc")
-
 tcPluginInit :: API.TcPluginM API.Init PluginDefs
 tcPluginInit = do
   API.tcPluginTrace "--Plugin Init--" empty
   typesModule   <- findTypesModule
   preludeModule  <- findPreludeModule
-  -- primModule     <- findGhcPrimModule
 
   rowPlusTF      <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "~+~")
   allTF          <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "All")
@@ -135,13 +131,11 @@ tcPluginInit = do
                    , rowPlusCls    = rowPlusCls
                    , rowLeqCls     = rowLeqCls
                    , functorCls    = functorCls
-                   -- , primEqCls     = primEqCls
                    })
 
 -- The entry point for constraint solving
 tcPluginSolve :: PluginDefs -> [ API.Ct ] -> [ API.Ct ] -> API.TcPluginM API.Solve API.TcPluginSolveResult
-tcPluginSolve _ _ [] = do -- simplify given constraints, we don't have to worry about it it
-  -- API.tcPluginTrace "--Plugin Solve Givens--" (ppr givens)
+tcPluginSolve _ _ [] = do -- simplify given constraints, we don't have to worry about it yet
   pure $ API.TcPluginOk [] []
 tcPluginSolve defs givens wanteds = do
   API.tcPluginTrace "--Plugin Solve Wanteds Start--" (ppr givens $$ ppr wanteds)
@@ -201,7 +195,11 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
                                                                                  , ppr x_s, ppr xs
                                                                                  , ppr y_s, ppr ys
                                                                                  , ppr z_s, ppr zs ])
-            ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], []) }
+
+
+
+            ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], [])
+            }
     else do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
                                                                                  , ppr x_s, ppr xs
                                                                                  , ppr y_s, ppr ys
@@ -273,13 +271,12 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , clsCon == API.classTyCon rowPlusCls
   , Just (ztyCon, [_, z1, z2]) <- API.splitTyConApp_maybe z
   , ztyCon == rowPlusTF
-  -- , API.eqType x z1 && API.eqType y z2 || API.eqType y z1 && API.eqType x z2
   =  do { API.tcPluginTrace "--Plugin solving Plus and ~+~--" (vcat [ ppr clsCon
                                                                     , ppr x, ppr y, ppr z
                                                                     , ppr rowPlusTF
                                                                     , ppr z1, ppr z2 ])
         ; nw1 <- API.newWanted (API.ctLoc ct) (GHC.mkPrimEqPred x z1)
-        ; nw2 <- API.newWanted (API.ctLoc ct) (GHC.mkPrimEqPred  y z2)
+        ; nw2 <- API.newWanted (API.ctLoc ct) (GHC.mkPrimEqPred y z2)
         ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)]
                                         , API.mkNonCanonical <$> [ nw1, nw2 ]
                                         , [])
@@ -443,20 +440,19 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
   , API.eqType ka kb
   , let rowAssocKi = mkTyConApp rowAssocTyCon [ka]
   = do { let inter = setIntersect assocs_a assocs_b
+             concat_assocs = sortAssocs $ assocs_a ++ assocs_b
+             redn = API.mkTyFamAppReduction "RoHsPlugin" API.Nominal rowPlusTF tys
+                               (API.mkTyConApp rTyCon [ka, mkPromotedListTy rowAssocKi concat_assocs])
        ; if null inter
-         then do { let concat_assocs = sortAssocs $ assocs_a ++ assocs_b
+         then do {
                  ; API.tcPluginTrace "--Plugin RowConcatRewrite (~+~)--" (vcat [ text "args_a:" <+> ppr assocs_a
                                                                      , text "args_b:" <+> ppr assocs_b
                                                                      , text "args:"   <+> ppr concat_assocs
                                                                      , text "givens:" <+> ppr _givens
                                                                      ])
-                 ; return $ API.TcPluginRewriteTo
-                           (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal rowPlusTF tys
-                               (API.mkTyConApp rTyCon [ka, mkPromotedListTy rowAssocKi concat_assocs]))
-                           []
+                 ; return $ API.TcPluginRewriteTo redn []
                  }
-         else API.pprPanic "Rohs Plugin" (vcat [text "Cannot concatinate rows"
-                                           , ppr a, text "with",  ppr b, text "common labels:" <+> ppr (getLabels inter)])
+         else throwTypeError redn (mkSameLableError a b inter)
        }
   | otherwise
   = do API.tcPluginTrace "other tyfam" (ppr tys)
@@ -530,12 +526,25 @@ sortAssocs = sortBy cmpAssoc
 
 
 -- Return the given type family reduction, while emitting an additional type error with the given message.
--- throwTypeError :: API.Reduction -> API.TcPluginErrorMessage -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
--- throwTypeError badRedn msg = do
---   env <- API.askRewriteEnv
---   errorTy <- API.mkTcPluginErrorTy msg
---   let
---     errorCtLoc :: API.CtLoc
---     errorCtLoc = API.bumpCtLocDepth $ API.rewriteEnvCtLoc env
---   errorCtEv <- API.setCtLocM errorCtLoc $ API.newWanted errorCtLoc errorTy
---   pure $ API.TcPluginRewriteTo badRedn [ API.mkNonCanonical errorCtEv ]
+throwTypeError :: API.Reduction -> API.TcPluginErrorMessage -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
+throwTypeError badRedn msg = do
+  env <- API.askRewriteEnv
+  errorTy <- API.mkTcPluginErrorTy msg
+  let
+    errorCtLoc :: API.CtLoc
+    errorCtLoc = API.bumpCtLocDepth $ API.rewriteEnvCtLoc env
+  errorCtEv <- API.setCtLocM errorCtLoc $ API.newWanted errorCtLoc errorTy
+  pure $ API.TcPluginRewriteTo badRedn [ API.mkNonCanonical errorCtEv ]
+
+
+
+-- else API.pprPanic "Rohs Plugin" (vcat [text "Cannot concatinate rows"
+--                                   , ppr a, text "with",  ppr b, text "common labels:" <+> ppr (getLabels inter)])
+
+mkSameLableError :: Type -> Type -> [Type] -> TcPluginErrorMessage
+mkSameLableError r1 r2 common = Txt "Cannot concat rows"
+                         :-: (PrintType r1)
+                         :-: (Txt " with ")
+                         :-: (PrintType r2)
+                         :-: Txt "Contains Common Labels"
+                         :-: foldl (\ acc lbl -> acc :|: (Txt " ") :|: (PrintType lbl)) (Txt "") (getLabels common)
