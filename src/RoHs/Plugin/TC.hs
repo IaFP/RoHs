@@ -7,7 +7,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use camelCase" #-}
-module TcPlugin (tcPlugin) where
+module RoHs.Plugin.TC (tcPlugin) where
 
 import qualified GHC.Plugins as GHC (mkLocalId, mkPrimEqPred)
 import GHC.Utils.Outputable
@@ -97,8 +97,8 @@ findModule moduleName pkgName_mb = do
 
 
 
-findCommonModule :: API.MonadTcPlugin m => m API.Module
-findCommonModule = findModule "Common" Nothing
+findTypesModule :: API.MonadTcPlugin m => m API.Module
+findTypesModule = findModule "RoHs.Language.Types" Nothing
 
 
 findPreludeModule :: API.MonadTcPlugin m => m API.Module
@@ -110,18 +110,18 @@ findPreludeModule = findModule "GHC.Base" (Just "base")
 tcPluginInit :: API.TcPluginM API.Init PluginDefs
 tcPluginInit = do
   API.tcPluginTrace "--Plugin Init--" empty
-  commonModule   <- findCommonModule
+  typesModule   <- findTypesModule
   preludeModule  <- findPreludeModule
   -- primModule     <- findGhcPrimModule
 
-  rowPlusTF      <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "~+~")
-  allTF          <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "All")
-  rowTyCon       <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Row")
-  rTyCon         <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc "R")
-  rowAssoc       <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig commonModule (API.mkDataOcc ":=")
-  rowAssocTyCon  <- API.tcLookupTyCon =<< API.lookupOrig commonModule (API.mkTcOcc "Assoc")
-  rowLeqCls      <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "~<~")
-  rowPlusCls     <- API.tcLookupClass =<< API.lookupOrig commonModule (API.mkClsOcc "Plus")
+  rowPlusTF      <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "~+~")
+  allTF          <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "All")
+  rowTyCon       <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "Row")
+  rTyCon         <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig typesModule (API.mkDataOcc "R")
+  rowAssoc       <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig typesModule (API.mkDataOcc ":=")
+  rowAssocTyCon  <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "Assoc")
+  rowLeqCls      <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "~<~")
+  rowPlusCls     <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "Plus")
   functorCls     <- API.tcLookupClass =<< API.lookupOrig preludeModule (API.mkClsOcc "Functor")
   -- primEqCls      <- API.tcLookupClass =<< API.lookupOrig primModule (API.mkClsOcc "~#")
 

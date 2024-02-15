@@ -1,4 +1,4 @@
-module SourcePlugin (addPlusConstraints) where
+module RoHs.Plugin.Source (addPlusConstraints) where
 
 import           GHC.Hs
 import           GHC.Rename.Names
@@ -21,7 +21,7 @@ resolveImport mod_name mPkg = do
 
 findCommonModule :: TcM Module
 findCommonModule = do
-  let modlName = mkModuleName "Common"
+  let modlName = mkModuleName "RoHs.Language.Types"
   pkgQual    <- runTcPluginM $ resolveImport modlName Nothing
   findResult <- runTcPluginM $ findImportedModule modlName pkgQual
   case findResult of

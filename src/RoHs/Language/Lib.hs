@@ -3,11 +3,12 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 
-{-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHsPlugin #-}
+{-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHs.Plugin #-}
 
-module RoHsLib (con0, case0, con1, case1
+module RoHs.Language.Lib (con0, case0, con1, case1
 
-               , module RoHsPrimitives
+               , module RoHs.Language.Primitives
+               , module RoHs.Language.Types
                ) where
 
 {-
@@ -15,8 +16,8 @@ A module for library of operations on rows and variants
 It also exports the Primitives, so no need for users to explicitly import it again
 -}
 
-import Common
-import RoHsPrimitives
+import RoHs.Language.Types
+import RoHs.Language.Primitives
 
 
 -- and we can define

@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Common where
+module RoHs.Language.Types where
 
 import GHC.Base
 

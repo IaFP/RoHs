@@ -1,10 +1,8 @@
 {-# LANGUAGE RecordWildCards #-}
-module CorePlugin (install) where
+module RoHs.Plugin.Core (install) where
 
 import GHC.Plugins
-
 import GHC.Types.Unique
-
 import GHC.Utils.Monad
 
 import qualified GHC.TcPlugin.API as API

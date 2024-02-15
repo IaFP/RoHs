@@ -62,20 +62,23 @@ library
     import:           ghcopts
 
     -- Modules exported by the library.
-    exposed-modules:  Common
-                      RoHsPrimitives
+    exposed-modules:  RoHs.Language.Types
+                      RoHs.Language.Primitives
+                      RoHs.Language.Lib
 
-                      RoHsPlugin
-                      SourcePlugin
-                      TcPlugin
-                      CorePlugin
+                      RoHs.Plugin
+                      -- RoHs.SourcePlugin
+                      -- RoHs.TcPlugin
+                      -- RoHs.CorePlugin
 
-                      RoHsLib
-                      Surface
+                      RoHs.Examples.Basic
                       -- Example
 
     -- Modules included in this library but not exported.
-    -- other-modules:
+    other-modules:    RoHs.Plugin.Source
+                      RoHs.Plugin.TC
+                      RoHs.Plugin.Core
+
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -90,6 +93,7 @@ library
                       containers
     -- Directories containing source files.
     hs-source-dirs:   src
+
 
     -- Base language which the package is written in.
     default-language: GHC2021

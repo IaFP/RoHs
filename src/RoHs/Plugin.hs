@@ -7,14 +7,14 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use camelCase" #-}
-module RoHsPlugin (plugin) where
+module RoHs.Plugin (plugin) where
 
 import qualified GHC.Plugins as GHC (Plugin(..), defaultPlugin, purePlugin)
 import qualified GHC.TcPlugin.API as API
 
-import qualified SourcePlugin as SP (addPlusConstraints)
-import qualified TcPlugin as TP (tcPlugin)
-import qualified CorePlugin as CP (install)
+import qualified RoHs.Plugin.Source as SP (addPlusConstraints)
+import qualified RoHs.Plugin.TC as TP (tcPlugin)
+import qualified RoHs.Plugin.Core as CP (install)
 
 -- TODOs: (DONE) The plugin should enable replacing class Common.Plus with Common.(~+~)
 --                    The user writes x ~+~ y and the source plugin converts it to Plus constraints

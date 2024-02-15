@@ -3,7 +3,7 @@
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
-{-# OPTIONS -fforce-recomp -fplugin RoHsPlugin #-}
+{-# OPTIONS -fforce-recomp -fplugin RoHs.Plugin #-}
 
 
 module IllTyped.RowConcat (main) where
