@@ -9,7 +9,7 @@ The Evidence Story
   2. `Plus x y z`
 
 
-- The "is subset of" predicate, represented by the typelcass `x ~<~ y`:
+- The "is subset of" predicate, represented by the typeclass `x ~<~ y`:
 
   The evidence for this type class an (instance) is a function that converts a row `y` into `x`.
   For example, the evidence for the type class:
@@ -25,10 +25,10 @@ The Evidence Story
 
         R '["y" := Bool, "z" := Int].
 
-	All the rows are represented as an appropriate System FC term, as we are implmenting the system as a GHC plugin.
+	All the rows are represented as an appropriate System FC term, as we are implementing the system as a GHC plugin.
 
 
-- The row concatination predicate, represented by the typeclass `Plus x y z`:
+- The row concatenation predicate, represented by the typeclass `Plus x y z`:
 
   The evidence for this typeclass is a function, which when given `z` can map the individual labels into
   the exact position of the source rows. More concretely, the evidence for the typeclass:
