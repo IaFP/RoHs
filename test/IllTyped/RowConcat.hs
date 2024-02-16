@@ -20,7 +20,7 @@ s2 = labR0 @"x" (True::Bool)
 same_labels :: R0 (R '["x" := Int] ~+~ (R '["x" := Bool]))
 same_labels = s1 `cat0` s2
 
-curried_lables :: forall z s t. (z ~ R [s := t]) =>  R0 z -> R0 (R '["x" := Int] ~+~ z)
+curried_lables :: forall z s t. (z ~ R '[s := t]) =>  R0 z -> R0 (R '["x" := Int] ~+~ z)
 curried_lables y = s1 `cat0` y
 
 -- should_fail = curried_lables `cat0` s2

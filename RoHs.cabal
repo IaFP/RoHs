@@ -78,7 +78,7 @@ library
     other-modules:    RoHs.Plugin.Source
                       RoHs.Plugin.TC
                       RoHs.Plugin.Core
-
+                      RoHs.Plugin.Semantics
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

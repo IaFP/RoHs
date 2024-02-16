@@ -94,7 +94,7 @@ compose (5, d) (_, e) = (4, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafe
 compose (6, d) (_, e) = (4, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e, unsafeNth i4 e, unsafeNth i5 e))  where
   (i0, i1, i2, i3, i4, i5) = unsafeCoerce d
 
--- The evidence for a *ground* constraint 
+-- The evidence for a *ground* constraint
 --
 --   R '[s0 := t0, ..., sj := tj] ~+~ R '[s0' := t0', ..., sk' := tk'] ~ R '[s0'' := t0'', ..., sl'' := tl'']
 --
@@ -234,7 +234,7 @@ inj :: (Int, a) -> (Int, b) -> (Int, b)
 inj (_, d) (k, v) = (unsafeNth k d, v)
 
 brn :: (Int, a) -> ((Int, b) -> c) -> ((Int, d) -> c) -> ((Int, f) -> c)
-brn (_, d) f g (k, v) = if n == 0 then f (j, unsafeCoerce v) else g (j, unsafeCoerce v) where 
+brn (_, d) f g (k, v) = if n == 0 then f (j, unsafeCoerce v) else g (j, unsafeCoerce v) where
   (n, j) = unsafeNth k d
 
 ctor0 :: a -> (Int, a)  -- dual to field0
@@ -269,10 +269,10 @@ i4 = (0, 62)
 
 f3 :: (Int, a) -> Int -- V0 (R '["x" := Int, "y" := Bool, "z" := Int, "w" := String]) -> Int
 f3 = brn e4 f1 (brn (2, ((1, 0), (0, 0)))
-                    (case0 (\(x :: String) -> length x)) 
+                    (case0 (\(x :: String) -> length x))
                     (case0 (\(x :: Int) -> x)))
 
-y3_0, y3_1, y3_2, y3_3 :: Int                    
+y3_0, y3_1, y3_2, y3_3 :: Int
 y3_0 = f3 i4
 y3_1 = f3 (inj e1 i1)
 y3_2 = f3 (inj e1 i2)
@@ -308,8 +308,8 @@ y3_3 = f3 i3
 ana :: (Int, a)                                -- `All c z` dictionary (size, tuple of dictionaries)
     -> ((Int, e1) -> (Int, e2) -> (Int, e3) -> e4 -> b -> c)   -- "Iterator": needs four pieces of evidence, as above; also needs proxy argument, but I'm leaving that out for now
     -> (Int, d) -> c                           -- Actual variant to final result
-ana (n, allE) f (k, v) = f (plusE n k) (oneIn n k) (manyIn n k) (unsafeNth k allE) (unsafeCoerce v) 
-  
+ana (n, allE) f (k, v) = f (plusE n k) (oneIn n k) (manyIn n k) (unsafeNth k allE) (unsafeCoerce v)
+
 
 pick :: Int -> Int -> (Int, Int)
 pick j k | j == k    = (0, 0)
@@ -346,7 +346,7 @@ manyIn 5 4 = (4, unsafeCoerce (0, 1, 2, 3))
 -- Let's see if it does anything
 
 -- showV :: forall z. All Show z => V0 z -> String
--- showV = anaA0 @Show (const show)   
+-- showV = anaA0 @Show (const show)
 
 showV :: (Int, a) -> (Int, b) -> String
 showV d k = ana d f k where
@@ -362,7 +362,7 @@ z2 = showV allShow (inj e1 i2)
 
 -- eqV :: forall z. All Eq z => V0 z -> V0 z -> Bool
 -- eqV v w = anaA0 @Eq g w where
---   g :: forall s y t. (Plus (R '[s := t]) y z, 
+--   g :: forall s y t. (Plus (R '[s := t]) y z,
 --                       R '[s := t] ~<~ z,
 --                       y ~<~ z,
 --                       Eq t) =>
