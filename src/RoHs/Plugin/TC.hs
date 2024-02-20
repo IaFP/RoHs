@@ -187,10 +187,10 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , Just x_s@(_r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
   , Just y_s@(_r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
   , Just z_s@(_r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
+  -- should we be checking that the _r_tycon's are actually `R`?
   , let xs = sortAssocs $ unfold_list_type_elems assocs_x
   , let ys = sortAssocs $ unfold_list_type_elems assocs_y
   , let zs = sortAssocs $ unfold_list_type_elems assocs_z
-  , let args = sortAssocs $ xs ++ ys
   = case (length xs + length ys == length zs, checkConcatEv xs ys zs) of
       (True, Just ps) ->
         do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" 
@@ -220,21 +220,20 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , Just yTVar <- getTyVar_maybe y
   -- y is just a type variable which we will solve for
   = do { API.tcPluginTrace "--Plugin solving improvement for Plus with Eq emit --" (vcat [ ppr predTy ])
-       ; if (checkSubset xs zs)
-         then do { let ys = sortAssocs $ setDiff xs zs
-                       rowAssocKi = mkTyConApp rowAssocTyCon [k]
-                       y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
-                 ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" (vcat [ ppr clsCon
-                                                                                              , ppr x, ppr z, ppr y, ppr ys
-                                                                                              , text "computed" <+> ppr y <+> text "=:=" <+> ppr y0
-                                                                                              ])
-                 ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
-                 ; return $ mergePluginWork acc ([ ( mkIdFunEvTerm predTy
-                                                   , ct) ]
-                                                 , [API.mkNonCanonical nw] -- no new wanteds
-                                                 , [(yTVar, y0)] -- new equalilites
-                                                 ) }
-         else return $ mergePluginWork acc ([], [ct], [])
+       ; case checkSubsetEv xs zs of
+           Just _is -> 
+             do { let ys = sortAssocs $ setDiff xs zs
+                      rowAssocKi = mkTyConApp rowAssocTyCon [k]
+                      y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
+                      Just ps = checkConcatEv xs ys zs   -- know this will succeed, because we constructed `ys` accordingly; ought to use `_is`, but can't be arsed...
+                ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" 
+                      (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
+                ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
+                ; return $ mergePluginWork acc ([ ( mkPlusEvTerm ps predTy, ct) ]
+                                                , [API.mkNonCanonical nw] -- no new wanteds
+                                                , [(yTVar, y0)] -- new equalilites
+                                                ) }
+           Nothing -> return $ mergePluginWork acc ([], [ct], [])
        }
   -- Handles the case where x is unknown but y and z is known
   -- technically this is solvable by swapping x and y from the previous case, but i'm afraid
@@ -249,40 +248,49 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , let zs = sortAssocs $ unfold_list_type_elems assocs_z
   , Just yTVar <- getTyVar_maybe y
   -- y is just a type variable which we will solve for
-  = do { if (checkSubset xs zs)
-         then do { let ys = sortAssocs $ setDiff xs zs
-                       rowAssocKi = mkTyConApp rowAssocTyCon [k]
-                       y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
-                 ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y (emit equality)--" (vcat [ ppr clsCon
-                                                                                              , ppr x, ppr z, ppr y, ppr ys
-                                                                                              , text "computed" <+> ppr y <+> text "=:=" <+> ppr y0
-                                                                                              ])
-
-                 ; return $ mergePluginWork acc ([ (mkIdFunEvTerm predTy, ct) ]
-                                                 , [] -- no new wanteds
-                                                 , [(yTVar, y0)] -- new equalilites
-                                                 ) }
-         else return $ mergePluginWork acc ([], [ct], [])
+  = do { API.tcPluginTrace "--Plugin solving improvement for Plus with Eq emit --" (vcat [ ppr predTy ])
+       ; case checkSubsetEv xs zs of
+           Just _is -> 
+             do { let ys = sortAssocs $ setDiff xs zs
+                      rowAssocKi = mkTyConApp rowAssocTyCon [k]
+                      y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
+                      Just ps = checkConcatEv xs ys zs   -- know this will succeed, because we constructed `ys` accordingly; ought to use `_is`, but can't be arsed...
+                ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" 
+                      (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
+                ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
+                ; return $ mergePluginWork acc ([ ( mkPlusEvTerm ps predTy, ct) ]
+                                                , [API.mkNonCanonical nw] -- no new wanteds
+                                                , [(yTVar, y0)] -- new equalilites
+                                                ) }
+           Nothing -> return $ mergePluginWork acc ([], [ct], [])
        }
-
   -- Handles the case where z is of the form x0 ~+~ y0 in [W] Plus x y (x0 ~+~ y0)
-  | predTy <- API.ctPred ct
-  , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
-  , clsCon == API.classTyCon rowPlusCls
-  , Just (ztyCon, [_, z1, z2]) <- API.splitTyConApp_maybe z
-  , ztyCon == rowPlusTF
-  =  do { API.tcPluginTrace "--Plugin solving Plus and ~+~--" (vcat [ ppr clsCon
-                                                                    , ppr x, ppr y, ppr z
-                                                                    , ppr rowPlusTF
-                                                                    , ppr z1, ppr z2 ])
-        ; nw1 <- API.newWanted (API.ctLoc ct) (GHC.mkPrimEqPred x z1)
-        ; nw2 <- API.newWanted (API.ctLoc ct) (GHC.mkPrimEqPred y z2)
-        ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)]
-                                        , API.mkNonCanonical <$> [ nw1, nw2 ]
-                                        , [])
-        }
-
-
+  --
+  -- JGM: I am pretty sure we should not be handling this case at all yet.  Suppose that we have:
+  --
+  --   Plus x y (w ~+~ z)
+  --
+  -- There are plenty of satisfying ways to instantiate this...for example, w/x,
+  -- z/y, or z/x, w/y, or say ["x" := Int, "y" := Bool] for x, ["z" := Float]
+  -- for y, ["x" := Int, "z" := Float] for w, and ["y" := Bool] for z.  So,
+  -- until further instantiation, I don't think there's anything to do with such
+  -- a constraint.
+  --
+  -- | predTy <- API.ctPred ct
+  -- , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
+  -- , clsCon == API.classTyCon rowPlusCls
+  -- , Just (ztyCon, [_, z1, z2]) <- API.splitTyConApp_maybe z
+  -- , ztyCon == rowPlusTF
+  -- =  do { API.tcPluginTrace "--Plugin solving Plus and ~+~--" (vcat [ ppr clsCon
+  --                                                                   , ppr x, ppr y, ppr z
+  --                                                                   , ppr rowPlusTF
+  --                                                                   , ppr z1, ppr z2 ])
+  --       ; nw1 <- API.newWanted (API.ctLoc ct) (GHC.mkPrimEqPred x z1)
+  --       ; nw2 <- API.newWanted (API.ctLoc ct) (GHC.mkPrimEqPred y z2)
+  --       ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)]
+  --                                       , API.mkNonCanonical <$> [ nw1, nw2 ]
+  --                                       , [])
+  --       }
   --  Handles the case of x ~<~ x
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y])) <- API.splitTyConApp_maybe predTy
@@ -290,7 +298,7 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , API.eqType x y -- if x ~<~ x definitely holds
   = do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--" (vcat [ ppr clsCon
                                                                               , ppr x , ppr y ])
-       ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], []) }
+       ; return $ mergePluginWork acc ([(mkReflEvTerm predTy, ct)], [], []) }
 
   -- Handles the case of [(x := t)] ~<~ [(x := t), (y := u)]
   -- with the case where y0 ~<~ z0 but we have a substitution which makes it true
@@ -343,37 +351,6 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
                    return acc
 
-
--- Some constraint solving just results to having identity functions as evidence
--- This might change in the future as we may have some involved procedure
--- to manipuate dictonary evidences
-mkIdFunEvTerm :: Type -> API.EvTerm
-mkIdFunEvTerm predTy = API.evCast (mkCoreLams [a, x] (Var x)) co
-  where
-    mkName :: Int -> String -> API.Name
-    mkName i n = mkInternalName (mkLocalUnique i) (mkOccName tcName n) noSrcSpan
-
-    xn :: API.Name
-    xn = mkName 0 "x"
-
-
-    an :: API.Name
-    an = mkName 1 "a"
-
-    a :: API.TyVar
-    a = API.mkTyVar an liftedTypeKind
-
-    -- x :: a
-    x :: API.Id
-    x = GHC.mkLocalId xn manyDataConTy (TyVarTy a)
-
-    -- \forall a. a -> a
-    idTy :: Type
-    idTy = mkForAllTy (mkForAllTyBinder Inferred a) $ mkVisFunTy manyDataConTy (TyVarTy a) (TyVarTy a)
-
-    co :: Coercion
-    co = mkCoercion API.Representational idTy predTy
-
 mkCoreInt :: Int -> CoreExpr
 mkCoreInt i = mkCoreConApps intDataCon [Lit (LitNumber LitNumInt (fromIntegral i))]
 
@@ -388,6 +365,11 @@ mkPlusEvTerm pairs predTy = API.evCast tuple (mkCoercion API.Representational tu
   n = length pairs
   tupleTy = mkTupleTy API.Boxed [intTy, mkTupleTy API.Boxed (replicate n (mkTupleTy API.Boxed [intTy, intTy]))]
   tuple = mkCoreTup [mkCoreInt n, mkCoreTup [mkCoreTup [mkCoreInt x, mkCoreInt y] | (x, y) <- pairs]]
+
+mkReflEvTerm :: Type -> API.EvTerm
+mkReflEvTerm predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
+  tupleTy = mkTupleTy API.Boxed [intTy, unitTy]  
+  tuple = mkCoreTup [mkCoreInt (-1), mkCoreTup []]
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
 mkCoercion = API.mkPluginUnivCo "Proven by RoHs.TcPlugin"
@@ -492,10 +474,10 @@ getLabels = catMaybes . fmap getLabel
 -- They will not work as expected for non-Assoc types
 
 -- | Checks if the first argument is a prefix of the second argument
-checkMembership :: [Type] -> [Type] -> Bool
-checkMembership [] _         =  True
-checkMembership _  []        =  False
-checkMembership (x:xs) (y:ys)=  (x `eqAssoc` y == EQ) && checkMembership xs ys
+-- checkMembership :: [Type] -> [Type] -> Bool
+-- checkMembership [] _         =  True
+-- checkMembership _  []        =  False
+-- checkMembership (x:xs) (y:ys)=  (x `eqAssoc` y == EQ) && checkMembership xs ys
 
 -- | Checks if the first argument is a subset of the second argument, with evidence
 checkSubsetEv :: [Type] -> [Type] -> Maybe [Int]
@@ -503,8 +485,8 @@ checkSubsetEv [] _        = Just []
 checkSubsetEv (x : xs) ys = (:) <$> findIndex (API.eqType x) ys <*> checkSubsetEv xs ys
 
 -- | Checks if the first argument is a subset of the second argument
-checkSubset  :: [Type] -> [Type] -> Bool
-checkSubset xs ys = isJust (checkSubsetEv xs ys)
+-- checkSubset  :: [Type] -> [Type] -> Bool
+-- checkSubset xs ys = isJust (checkSubsetEv xs ys)
 
 checkConcatEv :: [Type] -> [Type] -> [Type] -> Maybe [(Int, Int)]
 checkConcatEv _ _ [] = Just []
