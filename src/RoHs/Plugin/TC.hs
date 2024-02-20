@@ -23,6 +23,7 @@ import GHC.Core.Make
 import GHC.Core.Type
 import GHC.Core.Predicate
 
+import GHC.Types.Literal
 import GHC.Types.Name      ( mkInternalName, tcName )
 import GHC.Types.Name.Occurrence   ( mkOccName )
 import GHC.Types.Unique
@@ -31,7 +32,7 @@ import GHC.Builtin.Types
 
 
 
-import Data.List (sortBy)
+import Data.List (findIndex, sortBy)
 import Data.Foldable (foldlM)
 import Data.Maybe
 
@@ -300,20 +301,20 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , let s = mkTvSubstPrs eqs
   , let x = substTy s x'
   , let y = substTy s y'
-  , Just x_s@(_r_tycon1, [kx, assocs_x])<- API.splitTyConApp_maybe x
-  , Just y_s@(_r_tycon2, [ky, assocs_y])<- API.splitTyConApp_maybe y
+  , Just x_s@(_r_tycon1, [kx, assocs_x]) <- API.splitTyConApp_maybe x
+  , Just y_s@(_r_tycon2, [ky, assocs_y]) <- API.splitTyConApp_maybe y
   , let xs = sortAssocs $ unfold_list_type_elems assocs_x
   , let ys = sortAssocs $ unfold_list_type_elems assocs_y
   , API.eqType kx ky -- we are not having hetrogenous row concat
-  = if (checkMembership xs ys)
-    then do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--" (vcat [ ppr clsCon
-                                                         , ppr x_s, ppr xs
-                                                         , ppr y_s, ppr ys ])
-            ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], []) }
-    else do { API.tcPluginTrace "--Plugin solving ~<~ unsolved--"  (vcat [ ppr clsCon
-                                                         , ppr x_s, ppr xs
-                                                         , ppr y_s, ppr ys])
-            ; return $ mergePluginWork acc ([], [ct], []) } -- no need to actually throw error here
+  = case checkSubsetEv xs ys of
+      Just is -> 
+        do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--" 
+                               (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr is ])
+           ; return $ mergePluginWork acc ([(mkLtEvTerm is predTy, ct)], [], []) }
+      Nothing ->
+        do { API.tcPluginTrace "--Plugin solving ~<~ unsolved--"  
+                               (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys])
+           ; return $ mergePluginWork acc ([], [ct], []) } -- no need to actually throw error here
                            -- it might fail down the tc pipleline anyway with a good error message
 
   -- Handles the case where we have [W] (R [x := t] ~+~ r) ~#  (R [x := t, y := u])
@@ -373,6 +374,17 @@ mkIdFunEvTerm predTy = API.evCast (mkCoreLams [a, x] (Var x)) co
 
     co :: Coercion
     co = mkCoercion API.Representational idTy predTy
+
+mkLtEvTerm :: [Int] -> Type -> API.EvTerm 
+mkLtEvTerm is predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
+
+  n = length is 
+  
+  tupleTy :: Type
+  tupleTy = mkTupleTy API.Boxed (replicate n intTy)
+
+  tuple :: CoreExpr
+  tuple = mkCoreTup [Lit (LitNumber LitNumInt (fromIntegral i)) | i <- is]
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
 mkCoercion = API.mkPluginUnivCo "Proven by RoHs.TcPlugin"
@@ -482,10 +494,16 @@ checkMembership [] _         =  True
 checkMembership _  []        =  False
 checkMembership (x:xs) (y:ys)=  (x `eqAssoc` y == EQ) && checkMembership xs ys
 
+-- | Checks if the first argument is a subset of the second argument, with evidence
+checkSubsetEv :: [Type] -> [Type] -> Maybe [Int]
+checkSubsetEv [] _        = Just []
+checkSubsetEv (x : xs) ys = (:) <$> findIndex (API.eqType x) ys <*> checkSubsetEv xs ys
+
 -- | Checks if the first argument is a subset of the second argument
 checkSubset  :: [Type] -> [Type] -> Bool
-checkSubset  [] _ = True
-checkSubset (x:xs) ys = (any (API.eqType x) ys) && checkSubset xs ys
+checkSubset xs ys = isJust (checkSubsetEv xs ys)
+-- checkSubset  [] _ = True
+-- checkSubset (x:xs) ys = (any (API.eqType x) ys) && checkSubset xs ys
 
 -- | computes for set difference
 --   setDiff xs ys = { z  | z in ys && z not in xs }
