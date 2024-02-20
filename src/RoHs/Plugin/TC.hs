@@ -32,6 +32,7 @@ import GHC.Builtin.Types
 
 
 
+import Control.Monad (mplus)
 import Data.List (findIndex, sortBy)
 import Data.Foldable (foldlM)
 import Data.Maybe
@@ -190,18 +191,16 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , let ys = sortAssocs $ unfold_list_type_elems assocs_y
   , let zs = sortAssocs $ unfold_list_type_elems assocs_z
   , let args = sortAssocs $ xs ++ ys
-  = if (length args == length zs)
-           && all (\(l, r) -> API.eqType l r) (zip args (init zs))
-    then do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" (vcat [ ppr clsCon
-                                                                                 , ppr x_s, ppr xs
-                                                                                 , ppr y_s, ppr ys
-                                                                                 , ppr z_s, ppr zs ])
-
-
-
-            ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], [])
-            }
-    else do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
+  = case (length xs + length ys == length zs, checkConcatEv xs ys zs) of
+      (True, Just ps) ->
+        do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" 
+                              (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr z_s, ppr zs, ppr ps ])
+           ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
+           ; --return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], [])
+             return $ mergePluginWork acc ([(mkPlusEvTerm ps predTy, ct)], [], [])
+           }
+      _ -> 
+       do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
                                                                                  , ppr x_s, ppr xs
                                                                                  , ppr y_s, ppr ys
                                                                                  , ppr z_s, ppr zs ])
@@ -375,16 +374,20 @@ mkIdFunEvTerm predTy = API.evCast (mkCoreLams [a, x] (Var x)) co
     co :: Coercion
     co = mkCoercion API.Representational idTy predTy
 
+mkCoreInt :: Int -> CoreExpr
+mkCoreInt i = mkCoreConApps intDataCon [Lit (LitNumber LitNumInt (fromIntegral i))]
+
 mkLtEvTerm :: [Int] -> Type -> API.EvTerm 
 mkLtEvTerm is predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
-
   n = length is 
-  
-  tupleTy :: Type
-  tupleTy = mkTupleTy API.Boxed (replicate n intTy)
+  tupleTy = mkTupleTy API.Boxed [intTy, mkTupleTy API.Boxed (replicate n intTy)]
+  tuple = mkCoreTup [mkCoreInt n, mkCoreTup (map mkCoreInt is)]
 
-  tuple :: CoreExpr
-  tuple = mkCoreTup [Lit (LitNumber LitNumInt (fromIntegral i)) | i <- is]
+mkPlusEvTerm :: [(Int, Int)] -> Type -> API.EvTerm
+mkPlusEvTerm pairs predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
+  n = length pairs
+  tupleTy = mkTupleTy API.Boxed [intTy, mkTupleTy API.Boxed (replicate n (mkTupleTy API.Boxed [intTy, intTy]))]
+  tuple = mkCoreTup [mkCoreInt n, mkCoreTup [mkCoreTup [mkCoreInt x, mkCoreInt y] | (x, y) <- pairs]]
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
 mkCoercion = API.mkPluginUnivCo "Proven by RoHs.TcPlugin"
@@ -502,8 +505,11 @@ checkSubsetEv (x : xs) ys = (:) <$> findIndex (API.eqType x) ys <*> checkSubsetE
 -- | Checks if the first argument is a subset of the second argument
 checkSubset  :: [Type] -> [Type] -> Bool
 checkSubset xs ys = isJust (checkSubsetEv xs ys)
--- checkSubset  [] _ = True
--- checkSubset (x:xs) ys = (any (API.eqType x) ys) && checkSubset xs ys
+
+checkConcatEv :: [Type] -> [Type] -> [Type] -> Maybe [(Int, Int)]
+checkConcatEv _ _ [] = Just []
+checkConcatEv xs ys (z : zs) = (:) <$> zIdx <*> checkConcatEv xs ys zs where
+  zIdx = ((0,) <$> findIndex (API.eqType z) xs) `mplus` ((1,) <$> findIndex (API.eqType z) ys)
 
 -- | computes for set difference
 --   setDiff xs ys = { z  | z in ys && z not in xs }
