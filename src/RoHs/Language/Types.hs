@@ -55,4 +55,6 @@ type family Each (f :: (a -> b)) (r :: Row a) :: Row b where
   -- Perhaps I could solve this problem by switching `Each` to a constraint-with
   -- -fundep, but that seems hard to use...
 
-type family All (cls :: a -> Constraint) (r :: Row a) :: Constraint where
+class All (cls :: a -> Constraint) (r :: Row a) where
+
+-- type family All (cls :: a -> Constraint) (r :: Row a) :: Constraint where
