@@ -22,6 +22,7 @@ import GHC.Core
 import GHC.Core.Make
 import GHC.Core.Type
 import GHC.Core.Predicate
+import GHC.Core.Utils (exprType)
 
 import GHC.Types.Literal
 import GHC.Types.Name      ( mkInternalName, tcName )
@@ -30,6 +31,7 @@ import GHC.Types.Unique
 import GHC.Types.SrcLoc
 import GHC.Builtin.Types
 
+import qualified GHC.Tc.Types.Constraint as API
 
 
 import Control.Monad (mplus)
@@ -67,15 +69,14 @@ mergePluginWork (g_1s, w_1s, eqs1s) (g_2s, w_2s, eqs2s) = (g_1s ++ g_2s, w_1s ++
 data PluginDefs =
   PluginDefs
     { rowPlusTF        :: !API.TyCon -- standin for ~+~
-    , allTF            :: !API.TyCon -- standin for All
     , rowTyCon         :: !API.TyCon -- standin for Row
     , rTyCon           :: !API.TyCon -- standin for R
     , rowAssoc         :: !API.TyCon -- standin for :=
     , rowAssocTyCon    :: !API.TyCon -- standin for Assoc
 
     , rowLeqCls        :: !API.Class -- standin for ~<~
-    , rowPlusCls       :: !API.Class -- standin for Plus
-    , functorCls       :: !API.Class -- standin for Functor
+    , rowPlusCls       :: !API.Class -- standin for Plus    
+    , allCls           :: !API.Class -- standin for All
     }
 
 
@@ -112,19 +113,17 @@ tcPluginInit = do
   typesModule   <- findTypesModule
   preludeModule  <- findPreludeModule
 
-  rowPlusTF      <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "~+~")
-  allTF          <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "All")
+  rowPlusTF      <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "~+~")  
   rowTyCon       <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "Row")
   rTyCon         <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig typesModule (API.mkDataOcc "R")
   rowAssoc       <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig typesModule (API.mkDataOcc ":=")
   rowAssocTyCon  <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "Assoc")
   rowLeqCls      <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "~<~")
   rowPlusCls     <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "Plus")
-  functorCls     <- API.tcLookupClass =<< API.lookupOrig preludeModule (API.mkClsOcc "Functor")
+  allCls         <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "All")
   -- primEqCls      <- API.tcLookupClass =<< API.lookupOrig primModule (API.mkClsOcc "~#")
 
-  pure (PluginDefs { rowPlusTF     = rowPlusTF
-                   , allTF         = allTF
+  pure (PluginDefs { rowPlusTF     = rowPlusTF                   
                    , rowTyCon      = rowTyCon
                    , rTyCon        = rTyCon
                    , rowAssoc      = rowAssoc
@@ -132,7 +131,7 @@ tcPluginInit = do
 
                    , rowPlusCls    = rowPlusCls
                    , rowLeqCls     = rowLeqCls
-                   , functorCls    = functorCls
+                   , allCls        = allCls
                    })
 
 -- The entry point for constraint solving
@@ -347,9 +346,33 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
                                        , []
                                        , [])
        }
+  | predTy <- API.ctPred ct
+  , Just (clsCon, [_, cls, row]) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon allCls
+  , Just (rCon, [_, assocs]) <- API.splitTyConApp_maybe row
+  , rCon == rTyCon
+  , Just (ls, ts) <- unzipAssocList assocs    
+  = do { API.tcPluginTrace "1 Found instance of All with class and args" (ppr (cls, ls, ts))
+       ; wanteds <- sequence [API.newWanted (API.ctLoc ct) (AppTy cls t) | t <- ts]
+       ; API.tcPluginTrace "2 Generating new wanteds" (ppr wanteds)
+       ; return $ mergePluginWork acc ([(mkAllEvTerm wanteds predTy, ct)], map API.mkNonCanonical wanteds, [])
+       }
+
+  -- missing cases: Plus x y z ||- x ~<~ z, y ~<~ z
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
                    return acc
+
+unzipAssocList :: API.TcType -> Maybe ([API.TcType], [API.TcType])
+unzipAssocList t = unzip <$> mapM openAssoc (unfold_list_type_elems t) where
+
+  openAssoc :: API.TcType -> Maybe (API.TcType, API.TcType)
+  openAssoc t
+    | Just (_assocCon, [_, lhs, rhs]) <- API.splitTyConApp_maybe t
+    -- check that assocCon is actually `:=`
+    = return (lhs, rhs)
+    | otherwise
+    = Nothing
 
 mkCoreInt :: Int -> CoreExpr
 mkCoreInt i = mkCoreConApps intDataCon [Lit (LitNumber LitNumInt (fromIntegral i))]
@@ -370,6 +393,14 @@ mkReflEvTerm :: Type -> API.EvTerm
 mkReflEvTerm predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
   tupleTy = mkTupleTy API.Boxed [intTy, unitTy]  
   tuple = mkCoreTup [mkCoreInt (-1), mkCoreTup []]
+  
+mkAllEvTerm :: [API.CtEvidence] -> Type -> API.EvTerm
+mkAllEvTerm evs predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
+  (evVars, predTys) = unzip [(evVar, predTy) | API.CtWanted predTy (API.EvVarDest evVar) _ _ <- evs]
+  evTuple = mkCoreConApps (cTupleDataCon (length evVars)) (map (Type . exprType) (map Var evVars) ++ map Var evVars)
+  evTupleTy = mkConstraintTupleTy predTys
+  tupleTy = mkTupleTy API.Boxed [intTy, intTy]
+  tuple = mkCoreTup [mkCoreInt (length evVars), Cast evTuple (mkCoercion API.Representational evTupleTy intTy)]
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
 mkCoercion = API.mkPluginUnivCo "Proven by RoHs.TcPlugin"
@@ -397,7 +428,7 @@ tcPluginStop _ = do
 -- We have to possibly rewrite ~+~ type family applications
 tcPluginRewrite :: PluginDefs -> API.UniqFM API.TyCon API.TcPluginRewriter
 tcPluginRewrite defs@(PluginDefs {..}) = API.listToUFM [ (rowPlusTF, rewrite_rowplus defs)
-                                                       , (allTF, rewrite_allTF defs)
+                                                       -- , (allTF, rewrite_allTF defs)
                                                        ]
 
 -- | Template interceptor for a type family tycon
@@ -408,22 +439,22 @@ tcPluginRewrite defs@(PluginDefs {..}) = API.listToUFM [ (rowPlusTF, rewrite_row
 
 
 -- | Constraints like All Functor (R [x := t]) should reduce to () as they are trivially satisfiable
-rewrite_allTF :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
-rewrite_allTF (PluginDefs { .. }) _givens tys
-  | [_, clsTyCon, r] <- tys
-  , API.eqType clsTyCon (mkNakedTyConTy $ API.classTyCon functorCls)
-  , Just (rtc_mb, _) <- API.splitTyConApp_maybe r
-  , rtc_mb == rTyCon
-  -- TODO: and possibly check if the assocs are well formed?
-  = do API.tcPluginTrace "--Plugin All TF unit constraint--" (vcat [ ppr allTF, ppr tys, ppr _givens ])
-       -- return a unit constraint?
-       pure $ API.TcPluginRewriteTo
-                           (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal allTF tys
-                               (mkConstraintTupleTy []))
-                           []
-  | otherwise
-  = do API.tcPluginTrace "--Plugin All TF--" (vcat [ ppr allTF, ppr tys, ppr _givens ])
-       pure API.TcPluginNoRewrite
+-- rewrite_allTF :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
+-- rewrite_allTF (PluginDefs { .. }) _givens tys
+--   | [_, clsTyCon, r] <- tys
+--   , API.eqType clsTyCon (mkNakedTyConTy $ API.classTyCon functorCls)
+--   , Just (rtc_mb, _) <- API.splitTyConApp_maybe r
+--   , rtc_mb == rTyCon
+--   -- TODO: and possibly check if the assocs are well formed?
+--   = do API.tcPluginTrace "--Plugin All TF unit constraint--" (vcat [ ppr allTF, ppr tys, ppr _givens ])
+--        -- return a unit constraint?
+--        pure $ API.TcPluginRewriteTo
+--                            (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal allTF tys
+--                                (mkConstraintTupleTy []))
+--                            []
+--   | otherwise
+--   = do API.tcPluginTrace "--Plugin All TF--" (vcat [ ppr allTF, ppr tys, ppr _givens ])
+--        pure API.TcPluginNoRewrite
 
 -- | Reduce (x := t) ~+~ (y := u) to [x := t, y := u]
 --   Post condition: The label occurance in the list is lexicographic.
