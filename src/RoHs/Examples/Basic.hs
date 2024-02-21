@@ -90,6 +90,10 @@ eqV v w = anaA0 @Eq g w where
   g _ x = (case0 @s (\y -> x == y) `brn0` const False) v
 
 
+eqV' :: V0 (R '["x" := Int, "y" := Bool]) -> V0 (R '["x" := Int, "y" := Bool]) -> Bool
+eqV' = eqV  
+
+
 fmapV :: forall a b z. All Functor z => (a -> b) -> V1 z a -> V1 z b
 fmapV f = anaA1 @Functor g where
 
@@ -126,8 +130,8 @@ desugar' :: forall bigr smallr.
 desugar' (Wrap e) = Wrap ((double `brn1` (fmapV desugar' . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar' x) (desugar' x)))
 
-desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
--- Here's a very explicit type...
--- desugar = desugar'
-desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
-  double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
+-- desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
+-- -- Here's a very explicit type...
+-- -- desugar = desugar'
+-- desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
+--   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
