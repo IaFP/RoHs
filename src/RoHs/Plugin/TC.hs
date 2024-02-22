@@ -31,6 +31,8 @@ import GHC.Types.Unique
 import GHC.Types.SrcLoc
 import GHC.Builtin.Types
 
+
+import RoHs.Plugin.CoreUtils hiding (mkCoercion)
 import qualified GHC.Tc.Types.Constraint as API
 
 
@@ -75,7 +77,7 @@ data PluginDefs =
     , rowAssocTyCon    :: !API.TyCon -- standin for Assoc
 
     , rowLeqCls        :: !API.Class -- standin for ~<~
-    , rowPlusCls       :: !API.Class -- standin for Plus    
+    , rowPlusCls       :: !API.Class -- standin for Plus
     , allCls           :: !API.Class -- standin for All
     }
 
@@ -113,7 +115,7 @@ tcPluginInit = do
   typesModule   <- findTypesModule
   preludeModule  <- findPreludeModule
 
-  rowPlusTF      <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "~+~")  
+  rowPlusTF      <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "~+~")
   rowTyCon       <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "Row")
   rTyCon         <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig typesModule (API.mkDataOcc "R")
   rowAssoc       <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig typesModule (API.mkDataOcc ":=")
@@ -123,7 +125,7 @@ tcPluginInit = do
   allCls         <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "All")
   -- primEqCls      <- API.tcLookupClass =<< API.lookupOrig primModule (API.mkClsOcc "~#")
 
-  pure (PluginDefs { rowPlusTF     = rowPlusTF                   
+  pure (PluginDefs { rowPlusTF     = rowPlusTF
                    , rowTyCon      = rowTyCon
                    , rTyCon        = rTyCon
                    , rowAssoc      = rowAssoc
@@ -192,13 +194,13 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , let zs = sortAssocs $ unfold_list_type_elems assocs_z
   = case (length xs + length ys == length zs, checkConcatEv xs ys zs) of
       (True, Just ps) ->
-        do { API.tcPluginTrace "--Plugin solving Plus construct evidence--" 
+        do { API.tcPluginTrace "--Plugin solving Plus construct evidence--"
                               (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr z_s, ppr zs, ppr ps ])
            ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
            ; --return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], [])
              return $ mergePluginWork acc ([(mkPlusEvTerm ps predTy, ct)], [], [])
            }
-      _ -> 
+      _ ->
        do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
                                                                                  , ppr x_s, ppr xs
                                                                                  , ppr y_s, ppr ys
@@ -220,12 +222,12 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   -- y is just a type variable which we will solve for
   = do { API.tcPluginTrace "--Plugin solving improvement for Plus with Eq emit --" (vcat [ ppr predTy ])
        ; case checkSubsetEv xs zs of
-           Just _is -> 
+           Just _is ->
              do { let ys = sortAssocs $ setDiff xs zs
                       rowAssocKi = mkTyConApp rowAssocTyCon [k]
                       y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
                       Just ps = checkConcatEv xs ys zs   -- know this will succeed, because we constructed `ys` accordingly; ought to use `_is`, but can't be arsed...
-                ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" 
+                ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--"
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
                 ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
                 ; return $ mergePluginWork acc ([ ( mkPlusEvTerm ps predTy, ct) ]
@@ -249,12 +251,12 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   -- y is just a type variable which we will solve for
   = do { API.tcPluginTrace "--Plugin solving improvement for Plus with Eq emit --" (vcat [ ppr predTy ])
        ; case checkSubsetEv xs zs of
-           Just _is -> 
+           Just _is ->
              do { let ys = sortAssocs $ setDiff xs zs
                       rowAssocKi = mkTyConApp rowAssocTyCon [k]
                       y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
                       Just ps = checkConcatEv xs ys zs   -- know this will succeed, because we constructed `ys` accordingly; ought to use `_is`, but can't be arsed...
-                ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--" 
+                ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--"
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
                 ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
                 ; return $ mergePluginWork acc ([ ( mkPlusEvTerm ps predTy, ct) ]
@@ -313,12 +315,12 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , let ys = sortAssocs $ unfold_list_type_elems assocs_y
   , API.eqType kx ky -- we are not having hetrogenous row concat
   = case checkSubsetEv xs ys of
-      Just is -> 
-        do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--" 
+      Just is ->
+        do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--"
                                (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr is ])
            ; return $ mergePluginWork acc ([(mkLtEvTerm is predTy, ct)], [], []) }
       Nothing ->
-        do { API.tcPluginTrace "--Plugin solving ~<~ unsolved--"  
+        do { API.tcPluginTrace "--Plugin solving ~<~ unsolved--"
                                (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys])
            ; return $ mergePluginWork acc ([], [ct], []) } -- no need to actually throw error here
                            -- it might fail down the tc pipleline anyway with a good error message
@@ -351,7 +353,7 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , clsCon == API.classTyCon allCls
   , Just (rCon, [_, assocs]) <- API.splitTyConApp_maybe row
   , rCon == rTyCon
-  , Just (ls, ts) <- unzipAssocList assocs    
+  , Just (ls, ts) <- unzipAssocList assocs
   = do { API.tcPluginTrace "1 Found instance of All with class and args" (ppr (cls, ls, ts))
        ; wanteds <- sequence [API.newWanted (API.ctLoc ct) (AppTy cls t) | t <- ts]
        ; API.tcPluginTrace "2 Generating new wanteds" (ppr wanteds)
@@ -374,12 +376,9 @@ unzipAssocList t = unzip <$> mapM openAssoc (unfold_list_type_elems t) where
     | otherwise
     = Nothing
 
-mkCoreInt :: Int -> CoreExpr
-mkCoreInt i = mkCoreConApps intDataCon [Lit (LitNumber LitNumInt (fromIntegral i))]
-
-mkLtEvTerm :: [Int] -> Type -> API.EvTerm 
+mkLtEvTerm :: [Int] -> Type -> API.EvTerm
 mkLtEvTerm is predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
-  n = length is 
+  n = length is
   tupleTy = mkTupleTy API.Boxed [intTy, mkTupleTy API.Boxed (replicate n intTy)]
   tuple = mkCoreTup [mkCoreInt n, mkCoreTup (map mkCoreInt is)]
 
@@ -391,9 +390,9 @@ mkPlusEvTerm pairs predTy = API.evCast tuple (mkCoercion API.Representational tu
 
 mkReflEvTerm :: Type -> API.EvTerm
 mkReflEvTerm predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
-  tupleTy = mkTupleTy API.Boxed [intTy, unitTy]  
+  tupleTy = mkTupleTy API.Boxed [intTy, unitTy]
   tuple = mkCoreTup [mkCoreInt (-1), mkCoreTup []]
-  
+
 mkAllEvTerm :: [API.CtEvidence] -> Type -> API.EvTerm
 mkAllEvTerm evs predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
   (evVars, predTys) = unzip [(evVar, predTy) | API.CtWanted predTy (API.EvVarDest evVar) _ _ <- evs]
@@ -403,7 +402,7 @@ mkAllEvTerm evs predTy = API.evCast tuple (mkCoercion API.Representational tuple
   tuple = mkCoreTup [mkCoreInt (length evVars), Cast evTuple (mkCoercion API.Representational evTupleTy intTy)]
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
-mkCoercion = API.mkPluginUnivCo "Proven by RoHs.TcPlugin"
+mkCoercion = API.mkPluginUnivCo "Proven by RoHs.Plugin.TC"
 
 -- If you get a list of assocs, flatten it out
 unfold_list_type_elems :: API.TcType -> [API.TcType]
@@ -469,7 +468,7 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
   , let rowAssocKi = mkTyConApp rowAssocTyCon [ka]
   = do { let inter = setIntersect assocs_a assocs_b
              concat_assocs = sortAssocs $ assocs_a ++ assocs_b
-             redn = API.mkTyFamAppReduction "RoHsPlugin" API.Nominal rowPlusTF tys
+             redn = API.mkTyFamAppReduction "RoHs.Tc.Plugin" API.Nominal rowPlusTF tys
                                (API.mkTyConApp rTyCon [ka, mkPromotedListTy rowAssocKi concat_assocs])
        ; if null inter
          then do {

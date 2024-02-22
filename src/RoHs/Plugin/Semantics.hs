@@ -29,7 +29,7 @@ primMap = [ (fsLit "labR0" ,   labR0Core)    -- :: forall s {t}. t -> R0 (R '[s 
           ]
 
 labR0Core, unlabR0Core, prj0Core, cat0Core, labV0Core, unlabV0Core, inj0Core, ana0Core, brn0Core :: Type -> CoreM CoreExpr
-labR0Core = mkIdCore
+
 unlabR0Core  = mkIdCore
 cat0Core = mkIdCore
 unlabV0Core = mkIdCore
@@ -60,13 +60,45 @@ mkIdCore oType = return $ Cast (mkCoreLams [a, x] (Var x)) (mkCastCo idTy oType)
     idTy = mkForAllTy (mkForAllTyBinder Inferred a) $ mkVisFunTy manyDataConTy (mkTyVarTy a) (mkTyVarTy a)
 
 
+labR0Core oType -- :: forall s {t}. t -> R0 (R '[s := t])
+  | (tyVars, ty) <- splitForAllTyVars oType                 -- tys [s, t]
+  , (_visFun, (_:_:_:argTy:resultTy:_)) <- splitTyConApp ty -- ty = t -> R0 (R '[s := t])
+  = do { let lab0Fun :: CoreExpr
+             lab0Fun = mkCoreLams [tyVars !! 0, tyVars !! 1 , t] (Cast body co)
+
+             sn   = mkName 0 "s"
+             tn = mkName 1 "t"
+
+             sTyVar, tTyVar :: TyVar
+             sTyVar = getTyVar (mkTyVarTy (tyVars !! 0))
+             tTyVar = getTyVar (mkTyVarTy (tyVars !! 1))
+
+             t =  mkLocalId tn manyDataConTy argTy
+
+
+             bodyTy =  mkTupleTy API.Boxed [intTy, mkTupleTy API.Boxed [intTy], mkTupleTy API.Boxed [argTy]]
+             body = mkCoreTup [ mkCoreInt 1, mkCoreInt 0   -- ( (1, (0))
+                              , Var t                                              -- , t
+                              ]                                                                -- )
+
+             co = mkCastCo bodyTy resultTy
+             debug_msg = text "labR0Core" <+> vcat [ text "Type" <+> ppr oType
+                                                   , text "TyBnds"   <+> ppr tyVars
+                                                   , text "argTy"    <+> ppr argTy
+                                                   , text "resultTy" <+> ppr resultTy
+                                                   , ppr lab0Fun ]
+
+       ; debugTraceMsg debug_msg
+       ; return lab0Fun }
+
+
 -- prj0Core :: Type -> CoreM CoreExpr
 prj0Core oType
   | (tys, ty) <- splitForAllTyCoVars oType      -- tys      = [y, z]
   , (_invsFun, (_:_:dTy:ty_body)) <- splitTyConApp ty  -- ty       = d => R0 y -> R0 z
   , (_visFun, (_:_:_:argTy:resultTy)) <- splitTyConApp (ty_body !! 0)  -- ty_body  = [R0 y -> R0 z]
-  = do { let mkPrjFun :: CoreExpr
-             mkPrjFun = mkCoreLams [z, y, d, ry] body
+  = do { let prjFun :: CoreExpr
+             prjFun = mkCoreLams [z, y, d, ry] body
     --  \ (3, (1,3,4)) (d) -> (d !! 1, d !! 3, d !! 4)
     -- The !! is justified as it was computed during type checking
     -- The types match because, again, it was justified during type checking
@@ -94,7 +126,7 @@ prj0Core oType
                                                   , ppr dTy
                                                   , ppr argTy
                                                   , ppr resultTy
-                                                  , ppr mkPrjFun ]
+                                                  , ppr prjFun ]
 
        ; debugTraceMsg debug_msg
        ; mkIdCore oType }

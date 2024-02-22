@@ -48,18 +48,12 @@ install opts todo = case find findSamePass todo of       -- check that we don't 
 --   The implementation correctness is well: ¯\_(ツ)_/¯
 txRoHsSemantics :: RoHsPluginOptions -> ModGuts -> CoreM ModGuts
 txRoHsSemantics _ mgs@ModGuts{..} = do {putMsg (text "Hello from" <+> (ppr $ moduleName mg_module))
-                               ; mg_binds' <- mapM (tx primMap) mg_binds
-                               ; return $ mgs{mg_binds = mg_binds'}}
+                                       ; mg_binds' <- mapM (tx primMap) mg_binds
+                                       ; return $ mgs{mg_binds = mg_binds'}}
 
 
 class Transform x where
   tx :: PrimMap -> x -> CoreM x
-
-
-instance Transform CoreProgram where
-  tx pm x = do { putMsgS "=================Plugin.Core: transforming binds=============="
-               ; mapM (tx pm) x --
-               }
 
 instance Transform CoreBind where
   tx pm (NonRec var expr) = NonRec var <$> tx pm expr
@@ -69,7 +63,12 @@ instance Transform CoreExpr where
   tx pm (Var i) = case List.lookup (getOccFS i) pm of
                     Nothing -> return $ Var i
                     Just e -> e (idType i)
+
   tx pm (Lam arg body) = Lam arg <$> tx pm body
   tx pm (App e1 e2)    = liftA2 App (tx pm e1) (tx pm e2)
+
+  tx pm (Let bind e)    = liftA2 Let (tx pm bind) (tx pm e)
+
+  tx pm (Tick ct e)    = Tick ct <$> (tx pm e)
 
   tx _ x              = return x

@@ -26,3 +26,7 @@ mkTypK = mkBigCoreTup
 
 mkName :: Int -> String -> Name
 mkName i n = mkInternalName (mkLocalUnique i) (mkOccName tcName n) noSrcSpan
+
+
+mkCoreInt :: Int -> CoreExpr
+mkCoreInt i = mkCoreConApps intDataCon [Lit (LitNumber LitNumInt (fromIntegral i))]

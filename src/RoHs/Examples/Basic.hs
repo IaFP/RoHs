@@ -3,7 +3,7 @@
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHsPlugin #-}
-{-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -ddump-ds -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -ddump-ds -ddump-simpl -dverbose-core2core -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
@@ -12,9 +12,16 @@ import RoHs.Language.Lib
 
 import Data.Proxy
 
+
+singleton_foo_Int :: R0 (R '["x" := Int])
+singleton_foo_Int = labR0 @"x" (1 :: Int)
+
+singleton_foo_Bool :: R0 (R '["y" := Bool])
+singleton_foo_Bool  = labR0 @"y" True
+{-
 -- See if we can do anything
 foo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool]))
-foo = labR0 @"x" (1 :: Int) `cat0` labR0 @"y" True
+foo = singleton_foo_Int `cat0` singleton_foo_Bool
 
 -- Demonstrates the (first features of the) source plugin: source plugin adds
 -- needed `Plus` constraint.
@@ -36,6 +43,10 @@ bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
 bar1 ::(V0 (R '["false" := Bool] ~+~ R '["true" := Int])) -> Int
 bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
+
+
+slice_foo :: R0 (R '["y" := Bool, "x" := Int])
+slice_foo = prj0 foo
 
 
 -- This is a *less* compelling argument against than I thought, but still
@@ -91,7 +102,7 @@ eqV v w = anaA0 @Eq g w where
 
 
 eqV' :: V0 (R '["x" := Int, "y" := Bool]) -> V0 (R '["x" := Int, "y" := Bool]) -> Bool
-eqV' = eqV  
+eqV' = eqV
 
 
 fmapV :: forall a b z. All Functor z => (a -> b) -> V1 z a -> V1 z b
@@ -135,3 +146,4 @@ desugar' (Wrap e) = Wrap ((double `brn1` (fmapV desugar' . inj1)) e) where
 -- -- desugar = desugar'
 -- desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
 --   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
+-}
