@@ -108,17 +108,16 @@ labR0Core  (_, oType) -- :: forall s {t}. t -> R0 (R '[s := t])
        ; debugTraceMsg debug_msg
        ; return lab0Fun }
 
-findId :: String -> CoreM Id
-findId n = do let nOcc = mkVarOcc n
-              env <- getHscEnv
-              let nc = hsc_NC env
-              this_mod <- getModule
+findId :: ModGuts -> String -> CoreM Id
+-- the ModuleGuts are of the module that is being core processed.
+findId mgs n = do this_mod <- getModule
               -- liftIO $ lookupIfaceTop nOcc
-              name <- liftIO $ lookupNameCache nc this_mod nOcc
-              debugTraceMsg (text "name " <+> ppr name)
-              -- thing <- lookupThing name
-              -- debugTraceMsg (text "lookupThing " <+> ppr thing)
-              lookupId name
+                  let binds = mg_binds mgs
+                      nrs  = [ nr | nr@(NonRec var b) <- binds , n == getOccString var  ]
+                  debugTraceMsg (text "findId " <+> vcat [text n,  ppr nrs])
+                  case nrs of
+                    (NonRec var _):_ -> return var
+                    _ ->  pprPanic "findId" (text "couldn't find" <+> vcat [text n,  ppr nrs])
 
 -- findId :: String -> CoreM Id
 -- findId n = do let nOcc = mkVarOcc n
@@ -266,11 +265,13 @@ cat0Core  (mgs, oType)                               -- :: oType = forall x y z.
 
 -- inj0Core :: Type -> CoreM CoreExpr
 -- injections go from smaller rows to bigger rows
-inj0Core  (_, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
+inj0Core  (mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
   | (tys, ty) <- splitForAllTyCoVars oType                          -- tys      = [y, z]
   , (_invsFun, (_:_:dTy:ty_body:_)) <- splitTyConApp ty             -- ty       = d => V0 z -> V0 y
   , (_visFun, (_:_:_:argTy:resultTy:_)) <- splitTyConApp (ty_body)  -- ty_body  = [V0 y -> V0 z]
-  = do { fstCoreId <- findId "fstC"
+  = do { fstCoreId <- findId mgs "fstC"
+       ; sndCoreId <- findId mgs "sndC"
+       ; unsafeCoerceNthCoreId <- findId mgs "unsafeNth"
 
        ; let injFun :: CoreExpr
              injFun = mkCoreLams [y, z, d, ry] (Cast body co)
@@ -291,11 +292,12 @@ inj0Core  (_, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
 
              v = Cast (Var ry) (mkCastCo argTy (mkTupleTy Boxed [intTy, anyTy]))
 
-             -- n = mkCoreApps (Var fstCoreId) [Type intTy, v]
+             n = mkCoreApps (Var fstCoreId) [Type intTy, v]
 
-             -- s = mkCoreApps sndCore (Cast (Var d) (mkTupleTy [(Type intTy), (Type anyTy)]))
+             s = mkCoreApps (Var sndCoreId) [Type intTy
+                                            , Cast (Var d) (mkCastCo dTy $ mkTupleTy Boxed [intTy, anyTy])]
 
-             -- b = mkCoreApps unsafeCoerceNthCore [(Type intTy), (Type anyTy), n, s]
+             b = mkCoreApps (Var unsafeCoerceNthCoreId) [(Type intTy), (Type anyTy), n, s]
 
              co = mkCastCo bodyTy resultTy
 
@@ -305,14 +307,13 @@ inj0Core  (_, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
 
              -- Need a match here
              -- match d ry with
-             body = mkCoreTup []
+             body = b
 
 
              debug_msg = text "inj0Core" <+> vcat [ text "Type:" <+> ppr oType
                                                   , text "dTy:" <+> ppr dTy
                                                   , text "argTy:" <+> ppr argTy
                                                   , text "resultTy:" <+> ppr resultTy
-                                                  -- , text "fst" <+> ppr fstCoreId
                                                   , ppr injFun ]
 
        ; debugTraceMsg debug_msg
