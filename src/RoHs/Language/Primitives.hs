@@ -35,7 +35,7 @@ labR0 :: forall s {t}. t -> R0 (R '[s := t])
 labR0 = undefined
 
 {-# OPAQUE unlabR0 #-}
-unlabR0 :: R0 (R '[s := t]) -> t
+unlabR0 :: forall s {t}. R0 (R '[s := t]) -> t
 unlabR0 = undefined
 
 {-# OPAQUE prj0 #-}
@@ -44,8 +44,8 @@ prj0 = undefined
 
 {-# OPAQUE cat0 #-}
 -- cat0 :: R0 y -> R0 z -> R0 (y ~+~ z)
-cat0 :: Plus y z x => R0 y -> R0 z -> R0 x
-cat0 _ _ = undefined
+cat0 :: forall {x} {y} {z}. Plus x y z => R0 x -> R0 y -> R0 z
+cat0 = undefined
 
 {-# OPAQUE labV0 #-}
 labV0 :: forall s {t}. t -> V0 (R '[s := t])

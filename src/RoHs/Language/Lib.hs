@@ -4,9 +4,9 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHs.Plugin #-}
-{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -dcore-lint -ddump-if-trace -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
 
-module RoHs.Language.Lib (con0, case0, sel0, con1, case1
+module RoHs.Language.Lib (con0, case0, sel0, con1, case1, fstC, sndC
 
                , module RoHs.Language.Primitives
                , module RoHs.Language.Types
@@ -38,3 +38,7 @@ con1 x = inj1 (labV1 @s x)
 
 case1 :: forall s {f} {t} {u}. (f t -> u) -> V1 (R '[s := f]) t -> u
 case1 f = f . unlabV1
+
+
+fstC = Prelude.fst
+sndC = Prelude.snd

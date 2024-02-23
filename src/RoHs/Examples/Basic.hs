@@ -18,11 +18,11 @@ singleton_foo_Int = labR0 @"x" (1 :: Int)
 
 singleton_foo_Bool :: R0 (R '["y" := Bool])
 singleton_foo_Bool  = labR0 @"y" True
-{-
+
 -- See if we can do anything
 foo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool]))
 foo = singleton_foo_Int `cat0` singleton_foo_Bool
-
+{-
 -- Demonstrates the (first features of the) source plugin: source plugin adds
 -- needed `Plus` constraint.
 foo1 :: R0 x -> R0 y -> R0 (x ~+~ y)

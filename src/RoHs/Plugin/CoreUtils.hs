@@ -15,18 +15,12 @@ mkCoercion = API.mkPluginUnivCo "RoHs.Plugin.Core"
 mkCastCo :: Type -> Type -> Coercion
 mkCastCo iTy oTy = mkCoercion Representational iTy oTy
 
--- | Make a k sized tuple type
-mkTupTyK :: [Type] -> Type
-mkTupTyK = mkBigCoreTupTy
-
--- | make a k sized tuple
-mkTypK :: [CoreExpr] -> CoreExpr
-mkTypK = mkBigCoreTup
-
-
 mkName :: Int -> String -> Name
 mkName i n = mkInternalName (mkLocalUnique i) (mkOccName tcName n) noSrcSpan
 
-
 mkCoreInt :: Int -> CoreExpr
 mkCoreInt i = mkCoreConApps intDataCon [Lit (LitNumber LitNumInt (fromIntegral i))]
+
+getLitInt :: CoreExpr -> Integer
+getLitInt (Lit il) = litValue il
+getLitInt _ = error "getLitInt"

@@ -112,7 +112,7 @@ findPreludeModule = findModule "GHC.Base" (Just "base")
 tcPluginInit :: API.TcPluginM API.Init PluginDefs
 tcPluginInit = do
   API.tcPluginTrace "--Plugin Init--" empty
-  typesModule   <- findTypesModule
+  typesModule    <- findTypesModule
   preludeModule  <- findPreludeModule
 
   rowPlusTF      <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "~+~")
@@ -123,7 +123,6 @@ tcPluginInit = do
   rowLeqCls      <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "~<~")
   rowPlusCls     <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "Plus")
   allCls         <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "All")
-  -- primEqCls      <- API.tcLookupClass =<< API.lookupOrig primModule (API.mkClsOcc "~#")
 
   pure (PluginDefs { rowPlusTF     = rowPlusTF
                    , rowTyCon      = rowTyCon
