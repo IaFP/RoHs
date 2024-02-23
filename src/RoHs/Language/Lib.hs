@@ -8,7 +8,7 @@
 
 module RoHs.Language.Lib (
     case0
-  -- , con0
+  , con0
   -- , sel0
   -- , con1
   -- , case1
@@ -30,8 +30,8 @@ import Unsafe.Coerce
 
 -- and we can define
 
--- con0 :: forall s {t} {z}. R '[s := t] ~<~ z => t -> V0 z
--- con0 x = inj0 (labV0 @s x)
+con0 :: forall s {t} {z}. R '[s := t] ~<~ z => t -> V0 z
+con0 x = inj0 (labV0 @s x)
 
 case0 :: forall s {t} {u}. (t -> u) -> V0 (R '[s := t]) -> u
 case0 f = f . unlabV0   -- I am surprised GHC can figure this out... and somewhat concerned about what it's actually figured out
@@ -50,8 +50,7 @@ case0 f = f . unlabV0   -- I am surprised GHC can figure this out... and somewha
 fstC = Prelude.fst
 sndC = Prelude.snd
 
-
-unsafeNth :: Int -> a -> b
+unsafeNth :: forall {a} {b}. Int -> a -> b
 unsafeNth 0 x = y where
   MkSolo y = unsafeCoerce x
 unsafeNth 1 x = y where

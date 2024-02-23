@@ -1,24 +1,12 @@
 module RoHs.Plugin.Semantics where
 
-import GHC.Builtin.Names
-
 import GHC.Core
 import GHC.Core.Opt.Monad
-import GHC.Types.TyThing
-import GHC.Types.Name.Cache
 import GHC.Core.Type
 import GHC.Core.Multiplicity
 import GHC.Core.Utils
-import GHC.Iface.Env
-import GHC.Tc.Utils.Env
 
 import GHC.Plugins
-
-import GHC.Types.Literal
-import GHC.Types.Unique
-
-import Control.Concurrent.MVar
-import Data.Maybe
 
 import RoHs.Plugin.CoreUtils
 
@@ -76,57 +64,90 @@ mkIdCore (_, oType) = return $ Cast (mkCoreLams [a, x] (Var x)) (mkCastCo idTy o
     idTy :: Type
     idTy = mkForAllTy (mkForAllTyBinder Inferred a) $ mkVisFunTy manyDataConTy (mkTyVarTy a) (mkTyVarTy a)
 
+-- :: forall x y z t. Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
+-- brn0Core (mgs, oType)
+--   | (tyVars, ty) <- splitForAllTyVars oType                  -- tyVars = [x, y, z, t]
+--   , (tys, resultTy) <- splitFunTys ty          -- ty = t -> V0 (R '[s := t])
+--   = do { let brn0Core :: CoreExpr
+--              brn0Core = mkCoreLams (tyVars ++ [d, f, g, z]) (mkCoreTup []) (mkCastCo bodyTy resultTy)
 
+--              bodyTy =
+
+--              debug_msg = text "brn0Core" <+> vcat [ text "Type" <+> ppr oType
+--                                                    , text "TyBnds"   <+> ppr tyVars
+--                                                    , text "argTys"    <+> ppr tys
+--                                                    , text "resultTy" <+> ppr resultTy
+--                                                    , ppr brn0Core ]
+--        ; debugTraceMsg debug_msg
+--        ; return brn0Core
+
+--        }
+
+
+-- forall s {t}. t -> V0 (R '[s := t])
+labV0Core (_, oType)
+  | (tyVars, ty) <- splitForAllTyVars oType                  -- tyVars = [s, t]
+  , (_visFun, (_:_:_:argTy:resultTy:_)) <- splitTyConApp ty -- ty = t -> V0 (R '[s := t])
+  = do {
+         let labV0Fun :: CoreExpr
+             labV0Fun = mkCoreLams [tyVars !! 0, tyVars !! 1, t] (Cast body co)
+
+             tn = mkName 1 "t"
+
+             t = mkLocalId tn manyDataConTy argTy
+
+             l = mkCoreInt 0
+
+             co = mkCastCo (mkTupleTy Boxed [intTy, argTy]) resultTy
+
+             body = mkCoreTup [l, (Var t)]
+
+             debug_msg = text "labV0Core" <+> vcat [ text "Type" <+> ppr oType
+                                                   , text "TyBnds"   <+> ppr tyVars
+                                                   , text "argTy"    <+> ppr argTy
+                                                   , text "resultTy" <+> ppr resultTy
+                                                   , ppr labV0Fun ]
+       ; debugTraceMsg debug_msg
+       ; return labV0Fun
+       }
+  | otherwise = pprPanic "shouldn't happen labV0Core" (ppr oType)
 -- unlabV0 :: forall s {t}. V0 (R '[s := t]) -> t
 unlabV0Core (mgs, oType)
   | (tyVars, ty) <- splitForAllTyVars oType                 -- tys [s, t]
   , (_visFun, (_:_:_:argTy:resultTy:_)) <- splitTyConApp ty -- ty = V0 (R '[s := t]) -> t
   = do { sndId <- findId mgs "sndC"
 
-       ; let unlab0Fun :: CoreExpr
-             unlab0Fun = mkCoreLams [tyVars !! 0, tyVars !! 1 , vId] (Cast body (mkCastCo anyType resultTy))
+       ; let unlabV0Fun :: CoreExpr
+             unlabV0Fun = mkCoreLams (tyVars ++ [vId]) (Cast body co)
 
-             sn = mkName 0 "s"
-             tn = mkName 1 "t"
              vn = mkName 2 "v0"
-
-             sTyVar, tTyVar :: TyVar
-             sTyVar = getTyVar (mkTyVarTy (tyVars !! 0))
-             tTyVar = getTyVar (mkTyVarTy (tyVars !! 1))
-
              vId = mkLocalId vn manyDataConTy argTy
 
-             co = mkCastCo anyTy resultTy
+             co = mkCastCo anyType resultTy
 
              v = Cast (Var vId) (mkCastCo argTy (mkTupleTy Boxed [intTy, anyType]))
 
-             bodyTy = resultTy
              body = mkCoreApps (Var sndId) [Type intTy, Type anyType, v]
 
-             debug_msg = text "unlab0Core" <+> vcat [ text "Type" <+> ppr oType
+             debug_msg = text "unlabV0Core" <+> vcat [ text "Type" <+> ppr oType
                                                    , text "TyBnds"   <+> ppr tyVars
                                                    , text "argTy"    <+> ppr argTy
                                                    , text "resultTy" <+> ppr resultTy
-                                                   , ppr unlab0Fun ]
+                                                   , ppr unlabV0Fun ]
        ; debugTraceMsg debug_msg
-       ; return unlab0Fun
+       ; return unlabV0Fun
 
        }
-
+ | otherwise = pprPanic "shouldn't happen unlabV0Core" (ppr oType)
 
 labR0Core  (_, oType) -- :: forall s {t}. t -> R0 (R '[s := t])
   | (tyVars, ty) <- splitForAllTyVars oType                 -- tys [s, t]
   , (_visFun, (_:_:_:argTy:resultTy:_)) <- splitTyConApp ty -- ty = t -> R0 (R '[s := t])
   = do { let lab0Fun :: CoreExpr
-             lab0Fun = mkCoreLams [tyVars !! 0, tyVars !! 1 , t] (Cast body co)
+             lab0Fun = mkCoreLams (tyVars ++ [t]) (Cast body co)
 
-             sn   = mkName 0 "s"
+
              tn = mkName 1 "t"
-
-             sTyVar, tTyVar :: TyVar
-             sTyVar = getTyVar (mkTyVarTy (tyVars !! 0))
-             tTyVar = getTyVar (mkTyVarTy (tyVars !! 1))
-
              t =  mkLocalId tn manyDataConTy argTy
 
 
@@ -144,6 +165,7 @@ labR0Core  (_, oType) -- :: forall s {t}. t -> R0 (R '[s := t])
 
        ; debugTraceMsg debug_msg
        ; return lab0Fun }
+  | otherwise = pprPanic "shouldn't happen labR0Core" (ppr oType)
 
 -- unlabR0Core ::  Type -> CoreM CoreExpr
 unlabR0Core  (_, oType)   -- oType = forall s t. R0 (R '[s := t]) -> t
@@ -152,19 +174,11 @@ unlabR0Core  (_, oType)   -- oType = forall s t. R0 (R '[s := t]) -> t
   = do { -- snd <- findId ("snd")
        ; let
              unlabR0Fun :: CoreExpr
-             unlabR0Fun = mkCoreLams [s, t, r] (Cast body co)
+             unlabR0Fun = mkCoreLams (tys ++ [r]) (Cast body co)
 
-             sn, tn :: Name
-             sn = mkName 0 "s"
-             tn = mkName 1 "t"
              rn = mkName 2 "r"
-
-             s, t :: TyVar
-             s = getTyVar (mkTyVarTy $ tys !! 0)
-             t = getTyVar (mkTyVarTy $ tys !! 1)
              r = mkLocalId rn manyDataConTy argTy
 
-             bodyTy = resultTy
              body :: CoreExpr
              body = App (mkCoreTup []) (Cast (Var r) (co')) -- mkCoreInt 42
 
@@ -180,7 +194,7 @@ unlabR0Core  (_, oType)   -- oType = forall s t. R0 (R '[s := t]) -> t
        ; debugTraceMsg debug_msg
        ; return unlabR0Fun
        }
-
+  | otherwise = pprPanic "shouldn't happen unlabR0Core" (ppr oType)
 
 
 -- prj0Core :: Type -> CoreM CoreExpr
@@ -189,19 +203,18 @@ prj0Core  (_, oType) -- forall z y. z ~<~ y => R0 y -> R0 z
   , (_invsFun, (_:_:dTy:ty_body:_)) <- splitTyConApp ty  -- ty       = d => R0 y -> R0 z
   , (_visFun, (_:_:_:argTy:resultTy:_)) <- splitTyConApp (ty_body)  -- ty_body  = [R0 y -> R0 z]
   = do { let prjFun :: CoreExpr
-             prjFun = mkCoreLams [z, y, d, ry] (Cast body co)
+             prjFun = mkCoreLams (tys ++ [d, ry]) (Cast body co)
     --  \ d@(3, (1,3,4)) (r) -> (r !! 1, r !! 3, r !! 4)
     -- The !! is justified as it was computed during type checking
     -- The types match because, again, it was justified during type checking
-             zn, yn, dn, ryn :: Name
-             zn = mkName 0 "z"
-             yn = mkName 1 "y"
+             dn, ryn :: Name
              dn = mkName 2 "$dz~<~y"
              ryn = mkName 3 "ry"
 
-             z, y, d, ry :: CoreBndr -- Can be TyVar or Id
-             z = mkTyVar zn (idType $ tys !! 0)
-             y = mkTyVar yn (idType $ tys !! 1)
+             -- z, y :: CoreBndr
+             d, ry :: CoreBndr -- Can be TyVar or Id
+             -- z = mkTyVar zn (idType $ tys !! 0)
+             -- y = mkTyVar yn (idType $ tys !! 1)
              d = mkLocalId dn manyDataConTy dTy
              ry = mkLocalId ryn  manyDataConTy argTy
 
@@ -227,6 +240,7 @@ prj0Core  (_, oType) -- forall z y. z ~<~ y => R0 y -> R0 z
 
        ; debugTraceMsg debug_msg
        ; return prjFun }
+  | otherwise = pprPanic "shouldn't happen prj0Core" (ppr oType)
 
 -- cat0Core :: Type -> CoreM CoreExpr
 cat0Core  (mgs, oType)                               -- :: oType = forall x y z. Plus x y z => R0 x -> R0 y -> R0 z
@@ -234,31 +248,21 @@ cat0Core  (mgs, oType)                               -- :: oType = forall x y z.
   ,  (_invsFun, (_:_:dplusTy:ty_body)) <- splitTyConApp ty   -- ty  = Plus x y z => R0 x -> R0 y -> R0 z
   ,  (vTys, resultTy) <- splitFunTys (ty_body !! 0)  -- ty_body  = [R0 x -> R0 y -> R0 z]
   = do { let cat0Fun :: CoreExpr
-             cat0Fun = mkCoreLams [x, y, z, dplus, rx, ry] (Cast body (mkCastCo bodyTy resultTy))
+             cat0Fun = mkCoreLams (tys ++ [dplus, rx, ry]) (Cast body (mkCastCo bodyTy resultTy))
 
              rxTy = vTys !! 0
              ryTy = vTys !! 1
-
-             xn = mkName 0 "x"
-             yn = mkName 1 "y"
-             zn = mkName 2 "z"
-
-
-             x, y, z :: CoreBndr
-             x = mkTyVar xn (idType (tys !! 0))
-             y = mkTyVar yn (idType (tys !! 1))
-             z = mkTyVar zn (idType (tys !! 2))
 
              dn    = mkName 3 "$dplus"
              dplus = mkLocalId dn manyDataConTy dplusTy
 
              rxn, ryn :: Name
              rxn = mkName 4 "rx"
-             ryn = mkName 4 "ry"
+             ryn = mkName 5 "ry"
 
              rx, ry :: CoreBndr
-             rx = mkLocalId rxn manyDataConTy (scaledThing $ vTys !! 0)
-             ry = mkLocalId rxn manyDataConTy (scaledThing $ vTys !! 1)
+             rx = mkLocalId rxn manyDataConTy (scaledThing rxTy)
+             ry = mkLocalId ryn manyDataConTy (scaledThing ryTy)
 
              n = 2
 
@@ -277,7 +281,7 @@ cat0Core  (mgs, oType)                               -- :: oType = forall x y z.
        ; debugTraceMsg debug_msg
        ; mkIdCore (mgs, oType)
        }
-
+  | otherwise = pprPanic "shouldn't happen cat0Core" (ppr oType)
 
 
 -- inj0Core :: Type -> CoreM CoreExpr
@@ -291,41 +295,31 @@ inj0Core  (mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
        ; unsafeCoerceNthCoreId <- findId mgs "unsafeNth"
 
        ; let injFun :: CoreExpr
-             injFun = mkCoreLams [y, z, d, ry] (Cast body co)
+             injFun = mkCoreLams (tys ++ [d,ry]) (Cast body co)
 
 
-    -- The types match because, again, it was justified during type checking
-             zn, yn, dn, ryn :: Name
-             zn = mkName 0 "z"
-             yn = mkName 1 "y"
+       -- The types match because, again, it was justified during type checking
+
+             dn, ryn :: Name
              dn = mkName 2 "$dz~<~y"
              ryn = mkName 3 "ry"
 
-             z, y, d, ry :: CoreBndr -- Can be TyVar or Id
-             y = mkTyVar yn (idType $ tys !! 0)
-             z = mkTyVar zn (idType $ tys !! 1)
+             d, ry :: CoreBndr -- Can be TyVar or Id
              d = mkLocalId dn manyDataConTy dTy
              ry = mkLocalId ryn manyDataConTy argTy
 
              v = Cast (Var ry) (mkCastCo argTy (mkTupleTy Boxed [intTy, anyType]))
 
-             n = mkCoreApps (Var fstCoreId) [Type intTy, v]
+             n = mkCoreApps (Var fstCoreId) [Type intTy, Type anyType,  v]
 
-             s = mkCoreApps (Var sndCoreId) [Type intTy
+             s = mkCoreApps (Var sndCoreId) [Type intTy, Type anyType
                                             , Cast (Var d) (mkCastCo dTy $ mkTupleTy Boxed [intTy, anyType])]
-
-             b = mkCoreApps (Var unsafeCoerceNthCoreId) [(Type intTy), (Type anyType), n, s]
 
              co = mkCastCo bodyTy resultTy
 
              bodyTy = mkTupleTy Boxed [intTy, anyType]
-
              body :: CoreExpr
-
-             -- Need a match here
-             -- match d ry with
-             body = b
-
+             body = mkCoreApps (Var unsafeCoerceNthCoreId) [Type anyType, Type (mkTupleTy Boxed [intTy, anyType]),  n, s]
 
              debug_msg = text "inj0Core" <+> vcat [ text "Type:" <+> ppr oType
                                                   , text "dTy:" <+> ppr dTy
@@ -335,3 +329,4 @@ inj0Core  (mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
 
        ; debugTraceMsg debug_msg
        ; return injFun }
+  | otherwise = pprPanic "shouldn't happen inj0Core" (ppr oType)
