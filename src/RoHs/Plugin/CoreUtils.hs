@@ -24,3 +24,19 @@ mkCoreInt i = mkCoreConApps intDataCon [Lit (LitNumber LitNumInt (fromIntegral i
 getLitInt :: CoreExpr -> Integer
 getLitInt (Lit il) = litValue il
 getLitInt _ = error "getLitInt"
+
+
+findId :: ModGuts -> String -> CoreM Id
+-- the ModuleGuts are of the module that is being core processed.
+findId mgs n = do this_mod <- getModule
+              -- liftIO $ lookupIfaceTop nOcc
+                  let binds = mg_binds mgs
+                      nrs  = [ nr | nr@(NonRec var b) <- binds , n == getOccString var  ]
+                  debugTraceMsg (text "findId " <+> vcat [text n,  ppr nrs])
+                  case nrs of
+                    (NonRec var _):_ -> return var
+                    _ ->  pprPanic "findId" (text "couldn't find" <+> vcat [text n,  ppr nrs])
+
+
+anyType :: Type
+anyType = anyTypeOfKind liftedTypeKind
