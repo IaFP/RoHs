@@ -41,7 +41,7 @@ type family R1 :: Row (a -> Type) -> a -> Type where -- term level re
 
 
 -- Let's repeat the tedium for variants...
-type family V0 :: Row Type -> Type where
+type family V0 (r :: Row Type) = (v :: Type) | v -> r where
 type family V1 :: Row (a -> Type) -> a -> Type where
 
 

@@ -307,10 +307,12 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
                                                                     , ppr x, ppr y, ppr z
                                                                     , ppr rowPlusTF
                                                                     ])
-
         ; let rowAssocKi = mkTyConApp rowAssocTyCon [kx]
-              z0 = API.mkTyConApp r_tycon [kx,  mkPromotedListTy rowAssocKi ys]
+              z0 = API.mkTyConApp r_tycon [kx,  mkPromotedListTy rowAssocKi zs]
         ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
+        ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--"
+             (text "computed" <+> ppr zTVar <+> text "=:=" <+> ppr z0)
+
         ; return $ mergePluginWork acc ([(mkPlusEvTerm ps predTy, ct)], [], [(zTVar, z0)])
         }
 
@@ -371,6 +373,9 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
                                        , []
                                        , [(yTVar, y0)])
        }
+
+
+  -- Solving for All constraints
   | predTy <- API.ctPred ct
   , Just (clsCon, [_, cls, row]) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon allCls
@@ -387,7 +392,8 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   -- ANI: I suspect that we shouldn't need this as the super class constraints on the type class Plus
   --      will generate the consequents as wanted constraints?
 
-  | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
+  | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (vcat [ppr ct
+                                                                                , text "acc:" <+> ppr acc ])
                    return acc
 
 unzipAssocList :: API.TcType -> Maybe ([API.TcType], [API.TcType])
