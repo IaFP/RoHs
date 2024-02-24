@@ -191,20 +191,19 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , let xs = sortAssocs $ unfold_list_type_elems assocs_x
   , let ys = sortAssocs $ unfold_list_type_elems assocs_y
   , let zs = sortAssocs $ unfold_list_type_elems assocs_z
-  = case (length xs + length ys == length zs, checkConcatEv xs ys zs) of
-      (True, Just ps) ->
-        do { API.tcPluginTrace "--Plugin solving Plus construct evidence--"
+  , length xs + length ys == length zs
+  , Just ps <- checkConcatEv xs ys zs
+  = do { API.tcPluginTrace "--Plugin solving Plus construct evidence--"
                               (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr z_s, ppr zs, ppr ps ])
-           ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
-           ; --return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)], [], [])
-             return $ mergePluginWork acc ([(mkPlusEvTerm ps predTy, ct)], [], [])
-           }
-      _ ->
-       do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
-                                                                                 , ppr x_s, ppr xs
-                                                                                 , ppr y_s, ppr ys
-                                                                                 , ppr z_s, ppr zs ])
-            ; return $ mergePluginWork acc ([], [ct], [])} -- no need to actually throw error.
+       ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
+       ; return $ mergePluginWork acc ([(mkPlusEvTerm ps predTy, ct)], [], [])
+       }
+      -- _ ->
+      --  do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
+      --                                                                            , ppr x_s, ppr xs
+      --                                                                            , ppr y_s, ppr ys
+      --                                                                            , ppr z_s, ppr zs ])
+      --       ; return $ mergePluginWork acc ([], [ct], [])} -- no need to actually throw error.
                            -- it might fail down the tc pipleline anyway witha good error message
 
   -- handles the case such where we have [W] Plus ([x := t]) (y0) ([x := t, y := u])
@@ -291,6 +290,31 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   --                                       , API.mkNonCanonical <$> [ nw1, nw2 ]
   --                                       , [])
   --       }
+
+  -- Handles the case where z is unknown, but we know x = R '[ .. ] and y = R '[ .. ] in [W] Plus x y z
+  | predTy <- API.ctPred ct
+  , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowPlusCls
+  , Just (r_tycon, [kx, assocs_x])<- API.splitTyConApp_maybe x
+  , Just (_, [ky, assocs_y])<- API.splitTyConApp_maybe y
+  , API.eqType kx ky -- x and y should be of the same row kinds
+  , Just zTVar <- getTyVar_maybe z
+  , let xs = sortAssocs $ unfold_list_type_elems assocs_x
+  , let ys = sortAssocs $ unfold_list_type_elems assocs_y
+  , let zs = sortAssocs (xs ++ ys)
+  , Just ps <- checkConcatEv xs ys zs
+  =  do { API.tcPluginTrace "--Plugin solving simple Plus--" (vcat [ ppr clsCon
+                                                                    , ppr x, ppr y, ppr z
+                                                                    , ppr rowPlusTF
+                                                                    ])
+
+        ; let rowAssocKi = mkTyConApp rowAssocTyCon [kx]
+              z0 = API.mkTyConApp r_tycon [kx,  mkPromotedListTy rowAssocKi ys]
+        ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
+        ; return $ mergePluginWork acc ([(mkPlusEvTerm ps predTy, ct)], [], [(zTVar, z0)])
+        }
+
+
   --  Handles the case of x ~<~ x
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y])) <- API.splitTyConApp_maybe predTy
@@ -345,7 +369,7 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
 
        ; return $ mergePluginWork acc ([(API.evCoercion (mkCoercion API.Nominal y y0), ct)]
                                        , []
-                                       , [])
+                                       , [(yTVar, y0)])
        }
   | predTy <- API.ctPred ct
   , Just (clsCon, [_, cls, row]) <- API.splitTyConApp_maybe predTy
@@ -360,6 +384,8 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
        }
 
   -- missing cases: Plus x y z ||- x ~<~ z, y ~<~ z
+  -- ANI: I suspect that we shouldn't need this as the super class constraints on the type class Plus
+  --      will generate the consequents as wanted constraints?
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
                    return acc

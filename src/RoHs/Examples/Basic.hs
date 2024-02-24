@@ -82,6 +82,11 @@ bar2 :: forall z y1 y2.
 bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
   where zero :: Integer = 0
 
+test_foo :: Bool -> Bool
+test_foo b = (xcase `brn0` ycase) (con0 @"X" b) where
+  xcase = case0 @"X" not
+  ycase = case0 @"Y" id
+
 {-
 showV :: forall z. All Show z => V0 z -> String
 showV = anaA0 @Show (const show)

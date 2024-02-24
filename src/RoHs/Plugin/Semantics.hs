@@ -36,7 +36,6 @@ mkIdCore (_, oType) = return $ Cast (mkCoreLams [a, x] (Var x)) (mkCastCo idTy o
     xn :: Name
     xn = mkName 0 "x_{gen}"
 
-
     an :: Name
     an = mkName 1 "a_{gen}"
 
