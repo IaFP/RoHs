@@ -26,6 +26,9 @@ singleton_foo_Bool  = labR0 @"y" True
 -- bar :: (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
 -- bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
+-- slice_foo :: R0 (R '["y" := Bool, "x" := Int])
+-- slice_foo = prj0 foo
+
 {-
 -- Demonstrates the (first features of the) source plugin: source plugin adds
 -- needed `Plus` constraint.
@@ -49,9 +52,6 @@ bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
 barBasic :: (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
 barBasic = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
-
-slice_foo :: R0 (R '["y" := Bool, "x" := Int])
-slice_foo = prj0 foo
 
 
 -- This is a *less* compelling argument against than I thought, but still

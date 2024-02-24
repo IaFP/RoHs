@@ -142,7 +142,8 @@ unlabV0Core (mgs, oType)
 
 labR0Core  (_, oType) -- :: forall s {t}. t -> R0 (R '[s := t])
   | (tyVars, ty) <- splitForAllTyVars oType                 -- tys [s, t]
-  , (_visFun, (_:_:_:argTy:resultTy:_)) <- splitTyConApp ty -- ty = t -> R0 (R '[s := t])
+  , (tys, resultTy) <- splitFunTys ty -- ty = t -> R0 (R '[s := t])
+  , [argTy] <- fmap scaledThing tys
   = do { let lab0Fun :: CoreExpr
              lab0Fun = mkCoreLams (tyVars ++ [t]) (Cast body co)
 
@@ -151,12 +152,14 @@ labR0Core  (_, oType) -- :: forall s {t}. t -> R0 (R '[s := t])
              t =  mkLocalId tn manyDataConTy argTy
 
 
-             bodyTy =  mkTupleTy Boxed [intTy, mkTupleTy Boxed [intTy], mkTupleTy Boxed [argTy]]
-             body = mkCoreTup [ mkCoreInt 1, mkCoreInt 0   -- ( (1, (0))
-                              , Var t                                              -- , t
-                              ]                                                                -- )
+             rowRepTy = mkTupleTy Boxed [ mkTupleTy Boxed [intTy, mkTupleTy Boxed [intTy]], argTy]
 
-             co = mkCastCo bodyTy resultTy
+             body = mkCoreTup [ mkCoreTup [ mkCoreInt 1
+                                          , mkCoreTup [mkCoreInt 0] ]   -- ( (1, (0))
+                              , mkCoreTup [Var t]                                  -- , t
+                              ]                                         -- )
+
+             co = mkCastCo rowRepTy resultTy
              debug_msg = text "labR0Core" <+> vcat [ text "Type" <+> ppr oType
                                                    , text "TyBnds"   <+> ppr tyVars
                                                    , text "argTy"    <+> ppr argTy
@@ -168,22 +171,27 @@ labR0Core  (_, oType) -- :: forall s {t}. t -> R0 (R '[s := t])
   | otherwise = pprPanic "shouldn't happen labR0Core" (ppr oType)
 
 -- unlabR0Core ::  Type -> CoreM CoreExpr
-unlabR0Core  (_, oType)   -- oType = forall s t. R0 (R '[s := t]) -> t
+unlabR0Core  (mgs, oType)   -- oType = forall s t. R0 (R '[s := t]) -> t
   | (tys, ty) <- splitForAllTyCoVars oType      -- tys      = [s, t]
   , (_vis, (_:_:_:argTy:resultTy:_)) <- splitTyConApp ty  -- ty = R0 (R '[s := t]) -> t
-  = do { -- snd <- findId ("snd")
+  = do { unsafeNthId <- findId mgs "unsafeNth"
        ; let
              unlabR0Fun :: CoreExpr
-             unlabR0Fun = mkCoreLams (tys ++ [r]) (Cast body co)
+             unlabR0Fun = mkCoreLams (tys ++ [rId]) body
 
-             rn = mkName 2 "r"
-             r = mkLocalId rn manyDataConTy argTy
+             rn = mkName 2 "r0"
+             rId = mkLocalId rn manyDataConTy argTy
+
+             rTy = mkTupleTy Boxed [intTy, intTy, resultTy]
+
+             co = mkCastCo argTy rTy
+             r = Cast (Var rId) co
+
+             index = mkCoreInt 3
 
              body :: CoreExpr
-             body = App (mkCoreTup []) (Cast (Var r) (co')) -- mkCoreInt 42
+             body = mkCoreApps (Var unsafeNthId) [Type rTy, Type resultTy, index, r]
 
-             co = mkCastCo anyType resultTy
-             co' = mkCastCo argTy (mkTupleTy Boxed [intTy, mkListTy intTy, mkListTy anyType])
              debug_msg = text "unlabR0Core" <+> vcat [ text "Type:" <+> ppr oType
                                                      , text "tys:" <+> ppr tys
                                                      , text "argTy:" <+> ppr argTy
@@ -198,46 +206,59 @@ unlabR0Core  (_, oType)   -- oType = forall s t. R0 (R '[s := t]) -> t
 
 
 -- prj0Core :: Type -> CoreM CoreExpr
-prj0Core  (_, oType) -- forall z y. z ~<~ y => R0 y -> R0 z
-  | (tys, ty) <- splitForAllTyCoVars oType      -- tys      = [y, z]
-  , (_invsFun, (_:_:dTy:ty_body:_)) <- splitTyConApp ty  -- ty       = d => R0 y -> R0 z
-  , (_visFun, (_:_:_:argTy:resultTy:_)) <- splitTyConApp (ty_body)  -- ty_body  = [R0 y -> R0 z]
-  = do { let prjFun :: CoreExpr
-             prjFun = mkCoreLams (tys ++ [d, ry]) (Cast body co)
+prj0Core  (mgs, oType) -- forall z y. z ~<~ y => R0 y -> R0 z
+  | (tyVars, ty) <- splitForAllTyCoVars oType      -- tys      = [y, z]
+  , (tys, resultTy) <- splitFunTys ty  -- ty       = d => R0 y -> R0 z
+  , [dTy, argTy] <- fmap scaledThing tys
+  = do { composeId <- findId mgs "compose"
+       ; fstId <- findId mgs "fstC"
+       ; sndId <- findId mgs "sndC"
+
+       ; let prjFun :: CoreExpr
+             prjFun = mkCoreLams (tyVars ++ [d, ry]) (Cast body co)
     --  \ d@(3, (1,3,4)) (r) -> (r !! 1, r !! 3, r !! 4)
     -- The !! is justified as it was computed during type checking
-    -- The types match because, again, it was justified during type checking
+    -- The types should match because, again, it was justified during type checking
              dn, ryn :: Name
              dn = mkName 2 "$dz~<~y"
              ryn = mkName 3 "ry"
 
-             -- z, y :: CoreBndr
              d, ry :: CoreBndr -- Can be TyVar or Id
-             -- z = mkTyVar zn (idType $ tys !! 0)
-             -- y = mkTyVar yn (idType $ tys !! 1)
              d = mkLocalId dn manyDataConTy dTy
              ry = mkLocalId ryn  manyDataConTy argTy
 
-             n = 1
-             co = mkCastCo bodyTy resultTy
+             dRepTy = mkTupleTy Boxed [intTy, anyType]
 
-             n' = 2
-             co' = mkCastCo dTy (mkTupleTy Boxed [intTy, mkTupleTy Boxed (replicate n' intTy)])
+             rowRepTy = mkTupleTy Boxed [mkTupleTy Boxed [intTy, anyType], anyType]
 
-             bodyTy = mkTupleTy Boxed [intTy, mkTupleTy Boxed (replicate n intTy), mkTupleTy Boxed [intTy]]
+             co = mkCastCo rowRepTy resultTy
 
              body :: CoreExpr
              -- Need a match here
              -- match d ry with
-             body = mkSingleAltCase (Cast (Var d) co') d (DataAlt (tupleDataCon Boxed 2)) [] (mkCoreTup [])
 
+             arg_row =  Cast (Var ry) (mkCastCo argTy rowRepTy)
+
+             fer = mkCoreApps (Var fstId) [Type dRepTy, Type anyType, arg_row]
+             ser = mkCoreApps (Var sndId) [Type dRepTy, Type anyType, arg_row]
+
+             body = mkCoreTup [ mkCoreApps (Var composeId) [ Type anyType
+                                                           , Type anyType
+                                                           , Type anyType
+                                                           , Cast (Var d) (mkCastCo dTy dRepTy)
+                                                           , fer
+                                                           ]
+                              , ser
+                              ]
+
+              -- prj d (e, r) -> (compose d e, r)
+              -- prj = \ d er -> (compose d fst er, snd er)
 
              debug_msg = text "prj0Core" <+> vcat [ text "Type:" <+> ppr oType
                                                   , text "dTy:" <+> ppr dTy
                                                   , text "argTy:" <+> ppr argTy
                                                   , text "resultTy:" <+> ppr resultTy
                                                   , ppr prjFun ]
-
        ; debugTraceMsg debug_msg
        ; return prjFun }
   | otherwise = pprPanic "shouldn't happen prj0Core" (ppr oType)
