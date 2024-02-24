@@ -52,7 +52,14 @@ foo_works =  (labR0 @"x" (1::Int)) `cat0` (labR0 @"y" (False::Bool))
 bar1 ::(V0 (R '["false" := Bool] ~+~ R '["true" := Int])) -> Int
 bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
-{-
+bar1' ::(V0 (R '["y" := Bool] ~+~ R '["x" := Int])) -> Int
+bar1' = case0 @"x" id `brn0` case0 @"y" (\b -> if b then 0 else 1)
+
+answer_to_everything :: Int
+answer_to_everything = bar1' (inj0 (labV0 @"x" (42::Int)))
+
+
+
 
 -- This is a *less* compelling argument against than I thought, but still
 -- concerned about the type argument to inj0.
@@ -75,7 +82,7 @@ bar2 :: forall z y1 y2.
 bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
   where zero :: Integer = 0
 
-
+{-
 showV :: forall z. All Show z => V0 z -> String
 showV = anaA0 @Show (const show)
 
