@@ -63,23 +63,22 @@ library
 
     -- Modules exported by the library.
     exposed-modules:  RoHs.Language.Types
-                      RoHs.Language.Primitives
                       RoHs.Language.Lib
 
                       RoHs.Plugin
-                      -- RoHs.SourcePlugin
-                      -- RoHs.TcPlugin
-                      -- RoHs.CorePlugin
 
                       RoHs.Examples.Basic
-                      -- Example
 
     -- Modules included in this library but not exported.
     other-modules:    RoHs.Plugin.Source
                       RoHs.Plugin.TC
                       RoHs.Plugin.Core
+
+                      RoHs.Language.Primitives
                       RoHs.Plugin.Semantics
                       RoHs.Plugin.CoreUtils
+
+
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

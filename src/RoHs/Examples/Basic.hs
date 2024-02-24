@@ -20,14 +20,17 @@ singleton_foo_Bool :: R0 (R '["y" := Bool])
 singleton_foo_Bool  = labR0 @"y" True
 
 -- See if we can do anything
--- foo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool]))
--- foo = singleton_foo_Int `cat0` singleton_foo_Bool
+foo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool]))
+foo = singleton_foo_Int `cat0` singleton_foo_Bool
 
--- bar :: (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
--- bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
+bar :: (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
+bar = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
--- slice_foo :: R0 (R '["y" := Bool, "x" := Int])
--- slice_foo = prj0 foo
+slice_foo_id :: R0 (R '["y" := Bool, "x" := Int])
+slice_foo_id = prj0 foo
+
+slice_foo :: R0 (R '["y" := Bool])
+slice_foo = prj0 foo
 
 {-
 -- Demonstrates the (first features of the) source plugin: source plugin adds

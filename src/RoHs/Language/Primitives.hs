@@ -30,39 +30,39 @@ import Data.Proxy
 
 
 -- Well this is potentially annoying...
-{-# OPAQUE labR0 #-}
-labR0 :: forall s {t}. t -> R0 (R '[s := t])
-labR0 = undefined
+{-# OPAQUE labR0_I #-}
+labR0_I :: forall s {t}. t -> R0 (R '[s := t])
+labR0_I = undefined
 
-{-# OPAQUE unlabR0 #-}
-unlabR0 :: forall s {t}. R0 (R '[s := t]) -> t
-unlabR0 = undefined
+{-# OPAQUE unlabR0_I #-}
+unlabR0_I :: forall s {t}. R0 (R '[s := t]) -> t
+unlabR0_I = undefined
 
-{-# OPAQUE prj0 #-}
-prj0 :: forall y z. y ~<~ z => R0 z -> R0 y
-prj0 = undefined
+{-# OPAQUE prj0_I #-}
+prj0_I :: forall y z. y ~<~ z => R0 z -> R0 y
+prj0_I = undefined
 
-{-# OPAQUE cat0 #-}
+{-# OPAQUE cat0_I #-}
 -- cat0 :: R0 y -> R0 z -> R0 (y ~+~ z)
-cat0 :: forall {x} {y} {z}. Plus x y z => R0 x -> R0 y -> R0 z
-cat0 = undefined
+cat0_I :: forall {x} {y} {z}. Plus x y z => R0 x -> R0 y -> R0 z
+cat0_I = undefined
 
-{-# OPAQUE labV0 #-}
-labV0 :: forall s {t}. t -> V0 (R '[s := t])
-labV0 = undefined
+{-# OPAQUE labV0_I #-}
+labV0_I :: forall s {t}. t -> V0 (R '[s := t])
+labV0_I = undefined
 
-{-# OPAQUE brn0 #-}
+{-# OPAQUE brn0_I #-}
 -- brn0 :: (V0 x -> t) -> (V0 y -> t) -> V0 (x ~+~ y) -> t
-brn0 :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
-brn0 = undefined
+brn0_I :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
+brn0_I = undefined
 
-{-# OPAQUE unlabV0 #-}
-unlabV0 :: forall s {t}. V0 (R '[s := t]) -> t
-unlabV0 = undefined
+{-# OPAQUE unlabV0_I #-}
+unlabV0_I :: forall s {t}. V0 (R '[s := t]) -> t
+unlabV0_I = undefined
 
-{-# OPAQUE inj0 #-}
-inj0 :: forall y z. y ~<~ z => V0 y -> V0 z
-inj0 = undefined
+{-# OPAQUE inj0_I #-}
+inj0_I :: forall y z. y ~<~ z => V0 y -> V0 z
+inj0_I = undefined
 
 {-# OPAQUE ana0 #-}
 ana0 :: forall z t.
