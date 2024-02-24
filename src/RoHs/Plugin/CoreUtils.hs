@@ -25,6 +25,11 @@ getLitInt :: CoreExpr -> Integer
 getLitInt (Lit il) = litValue il
 getLitInt _ = error "getLitInt"
 
+repackageArg :: Type -> Type -> Type
+repackageArg repTy ty | ([argty], rty) <- splitFunTys ty
+                      = mkFunTy (visArg TypeLike) manyDataConTy repTy rty
+                      | otherwise = error "repackageArg"
+
 
 findId :: ModGuts -> String -> CoreM Id
 -- the ModuleGuts are of the module that is being core processed.

@@ -64,11 +64,11 @@ unlabV0_I = undefined
 inj0_I :: forall y z. y ~<~ z => V0 y -> V0 z
 inj0_I = undefined
 
-{-# OPAQUE ana0 #-}
-ana0 :: forall z t.
+{-# OPAQUE ana0_I #-}
+ana0_I :: forall z t.
         (forall s y {u}. (Plus (R '[s := u]) y z) => u -> t) ->
         V0 z -> t
-ana0 _ = undefined
+ana0_I _ = undefined
 
 {-# OPAQUE anaE0 #-}
 anaE0 :: forall phi {z} {t}.

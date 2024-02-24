@@ -24,14 +24,11 @@ primMap = [ (fsLit "labR0_I" ,   labR0Core)    -- :: forall s {t}. t -> R0 (R '[
           , (fsLit "labV0_I",    labV0Core)    -- :: forall s {t}. t -> V0 (R '[s := t])
           , (fsLit "brn0_I",     brn0Core)     -- :: forall x y z t. Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
           , (fsLit "unlabV0_I",  unlabV0Core)  -- unlabV0 :: forall s {t}. V0 (R '[s := t]) -> t
-          , (fsLit "inj0_I",     inj0Core)
+          , (fsLit "inj0_I",     inj0Core)     --
           , (fsLit "ana0_I",     ana0Core)
-          , (fsLit "anaE0_I",    mkIdCore)
-          , (fsLit "anaA0_I",    mkIdCore)
           ]
 
 ana0Core = mkIdCore
-brn0Core = mkIdCore
 
 mkIdCore :: (ModGuts, Type) -> CoreM CoreExpr
 mkIdCore (_, oType) = return $ Cast (mkCoreLams [a, x] (Var x)) (mkCastCo idTy oType)
@@ -55,32 +52,59 @@ mkIdCore (_, oType) = return $ Cast (mkCoreLams [a, x] (Var x)) (mkCastCo idTy o
     idTy = mkForAllTy (mkForAllTyBinder Inferred a) $ mkVisFunTy manyDataConTy (mkTyVarTy a) (mkTyVarTy a)
 
 -- :: forall x y z t. Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
--- brn0Core (mgs, oType)
---   | (tyVars, ty) <- splitForAllTyVars oType                  -- tyVars = [x, y, z, t]
---   , (tys, resultTy) <- splitFunTys ty          -- ty = t -> V0 (R '[s := t])
---   = do { let brn0Core :: CoreExpr
---              brn0Core = mkCoreLams (tyVars ++ [d, f, g, z]) (mkCoreTup []) (mkCastCo bodyTy resultTy)
+brn0Core (mgs, oType)
+  | (tyVars, ty) <- splitForAllTyVars oType                  -- tyVars = [x, y, z, t]
+  , (tys, resultTy) <- splitFunTys ty                        -- ty = t -> V0 (R '[s := t])
+  , [dPlusTy, argfTy, arggTy, argvzTy] <- fmap scaledThing tys
+  = do { brnId <- findId mgs "brn"
 
---              bodyTy =
 
---              debug_msg = text "brn0Core" <+> vcat [ text "Type" <+> ppr oType
---                                                    , text "TyBnds"   <+> ppr tyVars
---                                                    , text "argTys"    <+> ppr tys
---                                                    , text "resultTy" <+> ppr resultTy
---                                                    , ppr brn0Core ]
---        ; debugTraceMsg debug_msg
---        ; return brn0Core
+        ; let brn0Core :: CoreExpr
+              brn0Core = mkCoreLams (tyVars ++ [d, vfx, vgy, vz]) body
 
---        }
+
+              dn, vfxn, vgyn, vzn :: Name
+              dn = mkName 0 "dplus"
+              vfxn = mkName 1 "vxf"
+              vgyn = mkName 2 "vyg"
+              vzn  = mkName 3 "vzg"
+
+              d, vfx, vgy, vz :: CoreBndr
+              d = mkLocalId dn manyDataConTy dPlusTy
+              vfx = mkLocalId vfxn manyDataConTy argfTy
+              vgy = mkLocalId vgyn manyDataConTy arggTy
+              vz =  mkLocalId vzn manyDataConTy argvzTy
+
+              dRepTy = mkTupleTy Boxed [intTy, anyType]
+              dVRepTy = mkTupleTy Boxed [intTy, anyType]
+
+              body = mkCoreApps (Var brnId)
+                                [ Type anyType, Type anyType, Type anyType, Type anyType, Type resultTy
+                                , Cast (Var d) (mkCastCo dPlusTy dRepTy)
+                                , Cast (Var vfx) (mkCastCo argfTy (repackageArg dVRepTy argfTy))
+                                , Cast (Var vgy) (mkCastCo arggTy (repackageArg dVRepTy arggTy))
+                                , Cast (Var vz) (mkCastCo argvzTy dVRepTy)
+                                ]
+
+              debug_msg = text "brn0Core" <+> vcat [ text "Type" <+> ppr oType
+                                                   , text "TyBnds"   <+> ppr tyVars
+                                                   , text "argTys"    <+> ppr tys
+                                                   , text "resultTy" <+> ppr resultTy
+                                                   , ppr brn0Core ]
+       ; debugTraceMsg debug_msg
+       ; return brn0Core
+
+       }
 
 
 -- forall s {t}. t -> V0 (R '[s := t])
 labV0Core (_, oType)
   | (tyVars, ty) <- splitForAllTyVars oType                  -- tyVars = [s, t]
-  , (_visFun, (_:_:_:argTy:resultTy:_)) <- splitTyConApp ty -- ty = t -> V0 (R '[s := t])
+  , (argTys, resultTy) <- splitFunTys ty                    -- ty = t -> V0 (R '[s := t])
+  , [argTy] <- fmap scaledThing argTys
   = do {
          let labV0Fun :: CoreExpr
-             labV0Fun = mkCoreLams [tyVars !! 0, tyVars !! 1, t] (Cast body co)
+             labV0Fun = mkCoreLams (tyVars ++ [t]) (Cast body co)
 
              tn = mkName 1 "t"
 

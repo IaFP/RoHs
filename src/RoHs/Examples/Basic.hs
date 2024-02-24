@@ -32,7 +32,7 @@ slice_foo_id = prj0 foo
 slice_foo :: R0 (R '["y" := Bool])
 slice_foo = prj0 foo
 
-{-
+
 -- Demonstrates the (first features of the) source plugin: source plugin adds
 -- needed `Plus` constraint.
 foo1 :: R0 x -> R0 y -> R0 (x ~+~ y)
@@ -52,10 +52,7 @@ foo_works =  (labR0 @"x" (1::Int)) `cat0` (labR0 @"y" (False::Bool))
 bar1 ::(V0 (R '["false" := Bool] ~+~ R '["true" := Int])) -> Int
 bar1 = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
 
-
-barBasic :: (V0 (R '["false" := Bool] ~+~  R '["true" := Int])) -> Int
-barBasic = case0 @"true" id `brn0` case0 @"false" (\b -> if b then 0 else 1)
-
+{-
 
 -- This is a *less* compelling argument against than I thought, but still
 -- concerned about the type argument to inj0.

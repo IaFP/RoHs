@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHs.Plugin #-}
-{-# OPTIONS -O2 -fforce-recomp -dcore-lint -ddump-if-trace -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
+{-# OPTIONS -O2 -fforce-recomp -dcore-lint -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
 
 module RoHs.Language.Lib (
     case0
@@ -24,7 +24,7 @@ module RoHs.Language.Lib (
   -- , case1
 
   -- * engineering hell
-  , fstC, sndC, unsafeNth, compose, catC
+  , fstC, sndC, unsafeNth, compose, catC, brn
 
   , module RoHs.Language.Types
   ) where
@@ -153,7 +153,7 @@ catC (4, fs) r p = ((4, unsafeCoerce (0, 1, 2, 3)), unsafeCoerce (get (unsafeNth
   get (1, n) _ p = field n p
 
 
-field :: Int -> ((Int, c), d) -> e
+field :: forall {c} {d} {e}. Int -> ((Int, c), d) -> e
 field n ((_, d), r) = unsafeNth (unsafeNth n d) r
 
 
@@ -162,18 +162,18 @@ pick j k | j == k    = (0, 0)
          | j < k     = (1, j)
          | otherwise = (1, j - 1)
 
-plusE :: Int -> Int -> (Int, a)
+plusE :: forall {a}. Int -> Int -> (Int, a)
 plusE 2 k = (2, unsafeCoerce (pick 0 k, pick 1 k))
 plusE 3 k = (3, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k))
 plusE 4 k = (4, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k, pick 3 k))
 plusE 5 k = (5, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k, pick 3 k, pick 4 k))
 plusE 6 k = (5, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k, pick 3 k, pick 4 k, pick 5 k))
 
-oneIn :: Int -> Int -> (Int, a)
+oneIn :: forall {a}. Int -> Int -> (Int, a)
 oneIn n k = (1, unsafeCoerce (MkSolo k))
 
 -- I am not excited about this code at all
-manyIn :: Int -> Int -> (Int, a)
+manyIn :: forall {a}. Int -> Int -> (Int, a)
 manyIn 2 0 = (1, unsafeCoerce (MkSolo 1))
 manyIn 2 1 = (1, unsafeCoerce (MkSolo 0))
 manyIn 3 0 = (2, unsafeCoerce (1, 2))
@@ -190,13 +190,6 @@ manyIn 5 3 = (4, unsafeCoerce (0, 1, 2, 4))
 manyIn 5 4 = (4, unsafeCoerce (0, 1, 2, 3))
 
 
-
--- singleton_foo_Int :: R0 (R '["x" := Int])
--- singleton_foo_Int = P.labR0 @"x" (1 :: Int)
-
--- singleton_foo_Bool :: R0 (R '["y" := Bool])
--- singleton_foo_Bool  = P.labR0 @"y" True
-
--- -- See if we can do anything
--- joinfoo :: R0 (R '["x" := Int] ~+~ (R '["y" := Bool]))
--- joinfoo = singleton_foo_Int `cat0` singleton_foo_Bool
+brn :: forall {a} {b} {d} {f} {c}. (Int, a) -> ((Int, b) -> c) -> ((Int, d) -> c) -> ((Int, f) -> c)
+brn (_, d) f g (k, v) = if n == 0 then f (j, unsafeCoerce v) else g (j, unsafeCoerce v) where
+  (n, j) = unsafeNth k d
