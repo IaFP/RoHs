@@ -81,7 +81,7 @@ library
 
 
     -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
+    other-extensions: DataKinds, ConstraintKinds, TypeApplications, ImpredicativeTypes, TypeFamilyDependencies
 
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.18,
@@ -97,6 +97,38 @@ library
 
     -- Base language which the package is written in.
     default-language: GHC2021
+
+executable RoHs-exe
+
+    other-modules:      RoHs.Examples.Basic
+                        RoHs.Language.Lib
+                        RoHs.Language.Primitives
+                        RoHs.Language.Types
+                        RoHs.Plugin
+                        RoHs.Plugin.Core
+                        RoHs.Plugin.CoreUtils
+                        RoHs.Plugin.Semantics
+                        RoHs.Plugin.Source
+                        RoHs.Plugin.TC
+
+
+    build-depends:    base ^>=4.18,
+                      ghc >=9.6.2,
+                      ghc-tcplugin-api ^>= 0.11.0.0,
+                      mtl ^>= 2.3,
+                      ghc-tcplugins-extra ^>= 0.4.5,
+                      syb ^>= 0.7,
+                      containers,
+                      RoHs
+    -- Directories containing source files.
+    hs-source-dirs:   src
+
+    main-is: Main.hs
+
+    -- Base language which the package is written in.
+    default-language: GHC2021
+
+
 
 test-suite RoHs-test
     -- Import common warning flags.

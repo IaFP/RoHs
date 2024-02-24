@@ -40,6 +40,9 @@ import RoHs.Language.Primitives
 import Data.Tuple
 import Unsafe.Coerce
 
+
+default (Int, Double)
+
 -- and we can define
 
 con0 :: forall s {t} {z}. R '[s := t] ~<~ z => t -> V0 z

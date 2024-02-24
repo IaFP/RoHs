@@ -1,5 +1,5 @@
 
-{-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications #-}
+{-# LANGUAGE ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications #-}
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
@@ -16,6 +16,7 @@ module Main where
 
 import RoHs.Language.Lib
 import RoHs.Examples.Basic
+import RoHs.Plugin
 
 s1 :: R0 (R '["x" := Int])
 s1 = labR0 @"x" (1::Int)

@@ -33,6 +33,8 @@ slice_foo :: R0 (R '["y" := Bool])
 slice_foo = prj0 foo
 
 
+
+
 -- Demonstrates the (first features of the) source plugin: source plugin adds
 -- needed `Plus` constraint.
 foo1 :: R0 x -> R0 y -> R0 (x ~+~ y)
