@@ -32,8 +32,8 @@ slice_foo_id = prj0 foo
 slice_foo :: R0 (R '["y" := Bool])
 slice_foo = prj0 foo
 
-
-
+unwrap_slice_foo :: Bool
+unwrap_slice_foo = unlabR0 @"y" slice_foo
 
 -- Demonstrates the (first features of the) source plugin: source plugin adds
 -- needed `Plus` constraint.
