@@ -34,10 +34,9 @@ repackageArg repTy ty | ([argty], rty) <- splitFunTys ty
 findId :: ModGuts -> String -> CoreM Id
 -- the ModuleGuts are of the module that is being core processed.
 findId mgs n = do this_mod <- getModule
-              -- liftIO $ lookupIfaceTop nOcc
                   let binds = mg_binds mgs
                       nrs  = [ nr | nr@(NonRec var b) <- binds , n == getOccString var  ]
-                  debugTraceMsg (text "findId " <+> vcat [text n,  ppr nrs])
+                  -- debugTraceMsg (text "findId " <+> vcat [text n,  ppr nrs])
                   case nrs of
                     (NonRec var _):_ -> return var
                     _ ->  pprPanic "findId" (text "couldn't find" <+> vcat [text n,  ppr nrs])

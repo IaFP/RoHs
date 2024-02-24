@@ -90,7 +90,7 @@ brn0Core (mgs, oType)
                                                    , text "argTys"    <+> ppr tys
                                                    , text "resultTy" <+> ppr resultTy
                                                    , ppr brn0Core ]
-       ; debugTraceMsg debug_msg
+       -- ; debugTraceMsg debug_msg
        ; return brn0Core
 
        }
@@ -120,7 +120,7 @@ labV0Core (_, oType)
                                                    , text "argTy"    <+> ppr argTy
                                                    , text "resultTy" <+> ppr resultTy
                                                    , ppr labV0Fun ]
-       ; debugTraceMsg debug_msg
+       -- ; debugTraceMsg debug_msg
        ; return labV0Fun
        }
   | otherwise = pprPanic "shouldn't happen labV0Core" (ppr oType)
@@ -147,7 +147,7 @@ unlabV0Core (mgs, oType)
                                                    , text "argTy"    <+> ppr argTy
                                                    , text "resultTy" <+> ppr resultTy
                                                    , ppr unlabV0Fun ]
-       ; debugTraceMsg debug_msg
+       -- ; debugTraceMsg debug_msg
        ; return unlabV0Fun
        }
  | otherwise = pprPanic "shouldn't happen unlabV0Core" (ppr oType)
@@ -177,7 +177,7 @@ labR0Core  (_, oType) -- :: forall s {t}. t -> R0 (R '[s := t])
                                                    , text "resultTy" <+> ppr resultTy
                                                    , ppr lab0Fun ]
 
-       ; debugTraceMsg debug_msg
+       -- ; debugTraceMsg debug_msg
        ; return lab0Fun }
   | otherwise = pprPanic "shouldn't happen labR0Core" (ppr oType)
 
@@ -210,7 +210,7 @@ unlabR0Core  (mgs, oType)   -- oType = forall s t. R0 (R '[s := t]) -> t
                                                      , ppr unlabR0Fun
                                                      ]
 
-       ; debugTraceMsg debug_msg
+       -- ; debugTraceMsg debug_msg
        ; return unlabR0Fun
        }
   | otherwise = pprPanic "shouldn't happen unlabR0Core" (ppr oType)
@@ -270,7 +270,7 @@ prj0Core  (mgs, oType) -- forall z y. z ~<~ y => R0 y -> R0 z
                                                   , text "argTy:" <+> ppr argTy
                                                   , text "resultTy:" <+> ppr resultTy
                                                   , ppr prjFun ]
-       ; debugTraceMsg debug_msg
+       -- ; debugTraceMsg debug_msg
        ; return prjFun }
   | otherwise = pprPanic "shouldn't happen prj0Core" (ppr oType)
 
@@ -310,7 +310,7 @@ cat0Core  (mgs, oType)                               -- :: oType = forall x y z.
                                                    , text "resultTy" <+> ppr resultTy
                                                    , ppr cat0Fun
                                                    ]
-       ; debugTraceMsg debug_msg
+       -- ; debugTraceMsg debug_msg
        ; return cat0Fun
        }
   | otherwise = pprPanic "shouldn't happen cat0Core" (ppr oType)
@@ -358,6 +358,6 @@ inj0Core  (mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
                                                   , text "resultTy:" <+> ppr resultTy
                                                   , ppr injFun ]
 
-       ; debugTraceMsg debug_msg
+       -- ; debugTraceMsg debug_msg
        ; return injFun }
   | otherwise = pprPanic "shouldn't happen inj0Core" (ppr oType)

@@ -234,7 +234,7 @@ inj :: (Int, a) -> (Int, b) -> (Int, b)
 inj (_, d) (k, v) = (unsafeNth k d, v)
 
 brn :: (Int, a) -> ((Int, b) -> c) -> ((Int, d) -> c) -> ((Int, f) -> c)
-brn (_, d) f g (k, v) = if n == 0 then f (j, unsafeCoerce v) else g (j, unsafeCoerce v) where
+brn (_, d) f g (k, v) = if n == (0::Int) then f (j, unsafeCoerce v) else g (j, unsafeCoerce v) where
   (n, j) = unsafeNth k d
 
 ctor0 :: a -> (Int, a)  -- dual to field0
@@ -328,20 +328,20 @@ oneIn n k = (1, unsafeCoerce (MkSolo k))
 
 -- I am not excited about this code at all
 manyIn :: Int -> Int -> (Int, a)
-manyIn 2 0 = (1, unsafeCoerce (MkSolo 1))
-manyIn 2 1 = (1, unsafeCoerce (MkSolo 0))
-manyIn 3 0 = (2, unsafeCoerce (1, 2))
-manyIn 3 1 = (2, unsafeCoerce (0, 2))
-manyIn 3 2 = (2, unsafeCoerce (0, 1))
-manyIn 4 0 = (3, unsafeCoerce (1, 2, 3))
-manyIn 4 1 = (3, unsafeCoerce (0, 2, 3))
-manyIn 4 2 = (3, unsafeCoerce (0, 1, 3))
-manyIn 4 3 = (3, unsafeCoerce (0, 1, 2))
-manyIn 5 0 = (4, unsafeCoerce (1, 2, 3, 4))
-manyIn 5 1 = (4, unsafeCoerce (0, 2, 3, 4))
-manyIn 5 2 = (4, unsafeCoerce (0, 1, 3, 4))
-manyIn 5 3 = (4, unsafeCoerce (0, 1, 2, 4))
-manyIn 5 4 = (4, unsafeCoerce (0, 1, 2, 3))
+manyIn 2 0 = (1, unsafeCoerce (MkSolo (1::Int)))
+manyIn 2 1 = (1, unsafeCoerce (MkSolo (0::Int)))
+manyIn 3 0 = (2, unsafeCoerce (1::Int, 2::Int))
+manyIn 3 1 = (2, unsafeCoerce (0::Int, 2::Int))
+manyIn 3 2 = (2, unsafeCoerce (0::Int, 1::Int))
+manyIn 4 0 = (3, unsafeCoerce (1::Int, 2::Int, 3::Int))
+manyIn 4 1 = (3, unsafeCoerce (0::Int, 2::Int, 3::Int))
+manyIn 4 2 = (3, unsafeCoerce (0::Int, 1::Int, 3::Int))
+manyIn 4 3 = (3, unsafeCoerce (0::Int, 1::Int, 2::Int))
+manyIn 5 0 = (4, unsafeCoerce (1::Int, 2::Int, 3::Int, 4::Int))
+manyIn 5 1 = (4, unsafeCoerce (0::Int, 2::Int, 3::Int, 4::Int))
+manyIn 5 2 = (4, unsafeCoerce (0::Int, 1::Int, 3::Int, 4::Int))
+manyIn 5 3 = (4, unsafeCoerce (0::Int, 1::Int, 2::Int, 4::Int))
+manyIn 5 4 = (4, unsafeCoerce (0::Int, 1::Int, 2::Int, 3::Int))
 
 -- Let's see if it does anything
 

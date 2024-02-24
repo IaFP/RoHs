@@ -4,7 +4,8 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHs.Plugin #-}
-{-# OPTIONS -O2 -fforce-recomp -dcore-lint -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
+-- {-# OPTIONS -O2 -fforce-recomp -dcore-lint -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
+{-# OPTIONS -fplugin RoHs.Plugin #-}
 
 module RoHs.Language.Lib (
     case0
@@ -24,7 +25,7 @@ module RoHs.Language.Lib (
   -- , case1
 
   -- * engineering hell
-  , fstC, sndC, unsafeNth, compose, catC, brn
+  , fstC, sndC, unsafeNth, compose, catC, brn, manyIn
 
   , module RoHs.Language.Types
   ) where
@@ -79,7 +80,8 @@ inj0     = inj0_I
 -- case1 f = f . unlabV1
 
 
-
+fstC :: forall {a}{b}. (a, b) -> a
+sndC :: forall {a}{b}. (a, b) -> b
 fstC = Prelude.fst
 sndC = Prelude.snd
 
@@ -125,12 +127,12 @@ compose :: (Int, a) -> (Int, b) -> (Int, c)
 -- again, we seem to need to iterate our definition... I'll do only a few cases
 -- I am concerned that we're going to stack up `unsafeCoerce`s, and that will
 -- lead to underspecified types (and so misbehaving coercions) in the middle...
-compose (0, _) _ = (0, unsafeCoerce ())
+compose (0, _) _ = (0::Int, unsafeCoerce ())
 compose (1, d) (_, e) = (1, unsafeCoerce (MkSolo (unsafeNth i e))) where
   MkSolo i = unsafeCoerce d
 compose (2, d) (_, e) = (2, unsafeCoerce (unsafeNth i e, unsafeNth j e))  where
   (i, j) = unsafeCoerce d
-compose (3, d) (_, e) = (3, unsafeCoerce (unsafeNth i d, unsafeNth j d, unsafeCoerce k d ))  where
+compose (3, d) (_, e) = (3, unsafeCoerce (unsafeNth i e, unsafeNth j e, unsafeCoerce k e))  where
   (i, j, k) = unsafeCoerce d
 compose (4, d) (_, e) = (4, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e))  where
   (i0, i1, i2, i3) = unsafeCoerce d
@@ -138,58 +140,47 @@ compose (5, d) (_, e) = (4, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafe
   (i0, i1, i2, i3, i4) = unsafeCoerce d
 compose (6, d) (_, e) = (4, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e, unsafeNth i4 e, unsafeNth i5 e))  where
   (i0, i1, i2, i3, i4, i5) = unsafeCoerce d
-
+compose _ _ = error "compose ran out of patience"
 
 catC :: (Int, a) -> ((Int, c), d) -> ((Int, e), f) -> ((Int, g), h) -- these types are increasingly hilarious
 -- 0 and 1 require 0-ary records, ignored per above
-catC (2, fs) r p = ((2, unsafeCoerce (0, 1)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p)) where
+catC (2, fs) r p = ((2, unsafeCoerce (0::Int, 1::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p)) where
+  get :: (Int, Int) -> ((Int, c), d) -> ((Int, e), f) -> h
   get (0, n) r _ = field n r
   get (1, n) _ p = field n p
-catC (3, fs) r p = ((3, unsafeCoerce (0, 1, 2)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p)) where
+  get _      _ _ = error "catC.get ran out of patience"
+catC (3, fs) r p = ((3, unsafeCoerce (0::Int, 1::Int, 2::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p)) where
+  get :: (Int, Int) -> ((Int, c), d) -> ((Int, e), f) -> h
   get (0, n) r _ = field n r
   get (1, n) _ p = field n p
-catC (4, fs) r p = ((4, unsafeCoerce (0, 1, 2, 3)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p, get (unsafeNth 3 fs) r p)) where
+  get _      _ _ = error "catC.get ran out of patience"
+catC (4, fs) r p = ((4::Int, unsafeCoerce (0::Int, 1::Int, 2::Int, 3::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p, get (unsafeNth 3 fs) r p)) where
+  get :: (Int, Int) -> ((Int, c), d) -> ((Int, e), f) -> h
   get (0, n) r _ = field n r
   get (1, n) _ p = field n p
-
+  get _      _ _ = error "catC.get ran out of patience"
+catC _ _ _       = error "catC ran out of patience"
 
 field :: forall {c} {d} {e}. Int -> ((Int, c), d) -> e
 field n ((_, d), r) = unsafeNth (unsafeNth n d) r
 
-
-pick :: Int -> Int -> (Int, Int)
-pick j k | j == k    = (0, 0)
-         | j < k     = (1, j)
-         | otherwise = (1, j - 1)
-
-plusE :: forall {a}. Int -> Int -> (Int, a)
-plusE 2 k = (2, unsafeCoerce (pick 0 k, pick 1 k))
-plusE 3 k = (3, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k))
-plusE 4 k = (4, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k, pick 3 k))
-plusE 5 k = (5, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k, pick 3 k, pick 4 k))
-plusE 6 k = (5, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k, pick 3 k, pick 4 k, pick 5 k))
-
-oneIn :: forall {a}. Int -> Int -> (Int, a)
-oneIn n k = (1, unsafeCoerce (MkSolo k))
-
--- I am not excited about this code at all
-manyIn :: forall {a}. Int -> Int -> (Int, a)
-manyIn 2 0 = (1, unsafeCoerce (MkSolo 1))
-manyIn 2 1 = (1, unsafeCoerce (MkSolo 0))
-manyIn 3 0 = (2, unsafeCoerce (1, 2))
-manyIn 3 1 = (2, unsafeCoerce (0, 2))
-manyIn 3 2 = (2, unsafeCoerce (0, 1))
-manyIn 4 0 = (3, unsafeCoerce (1, 2, 3))
-manyIn 4 1 = (3, unsafeCoerce (0, 2, 3))
-manyIn 4 2 = (3, unsafeCoerce (0, 1, 3))
-manyIn 4 3 = (3, unsafeCoerce (0, 1, 2))
-manyIn 5 0 = (4, unsafeCoerce (1, 2, 3, 4))
-manyIn 5 1 = (4, unsafeCoerce (0, 2, 3, 4))
-manyIn 5 2 = (4, unsafeCoerce (0, 1, 3, 4))
-manyIn 5 3 = (4, unsafeCoerce (0, 1, 2, 4))
-manyIn 5 4 = (4, unsafeCoerce (0, 1, 2, 3))
-
+manyIn :: Int -> Int -> (Int, a)
+manyIn 2 0 = (1, unsafeCoerce (MkSolo (1::Int)))
+manyIn 2 1 = (1, unsafeCoerce (MkSolo (0::Int)))
+manyIn 3 0 = (2, unsafeCoerce (1::Int, 2::Int))
+manyIn 3 1 = (2, unsafeCoerce (0::Int, 2::Int))
+manyIn 3 2 = (2, unsafeCoerce (0::Int, 1::Int))
+manyIn 4 0 = (3, unsafeCoerce (1::Int, 2::Int, 3::Int))
+manyIn 4 1 = (3, unsafeCoerce (0::Int, 2::Int, 3::Int))
+manyIn 4 2 = (3, unsafeCoerce (0::Int, 1::Int, 3::Int))
+manyIn 4 3 = (3, unsafeCoerce (0::Int, 1::Int, 2::Int))
+manyIn 5 0 = (4, unsafeCoerce (1::Int, 2::Int, 3::Int, 4::Int))
+manyIn 5 1 = (4, unsafeCoerce (0::Int, 2::Int, 3::Int, 4::Int))
+manyIn 5 2 = (4, unsafeCoerce (0::Int, 1::Int, 3::Int, 4::Int))
+manyIn 5 3 = (4, unsafeCoerce (0::Int, 1::Int, 2::Int, 4::Int))
+manyIn 5 4 = (4, unsafeCoerce (0::Int, 1::Int, 2::Int, 3::Int))
+manyIn _ _ = error "manyIn"
 
 brn :: forall {a} {b} {d} {f} {c}. (Int, a) -> ((Int, b) -> c) -> ((Int, d) -> c) -> ((Int, f) -> c)
-brn (_, d) f g (k, v) = if n == 0 then f (j, unsafeCoerce v) else g (j, unsafeCoerce v) where
+brn (_, d) f g (k, v) = if n == (0::Int) then f (j, unsafeCoerce v) else g (j, unsafeCoerce v) where
   (n, j) = unsafeNth k d
