@@ -25,7 +25,7 @@ module RoHs.Language.Lib (
   -- , case1
 
   -- * engineering hell
-  , fstC, sndC, unsafeNth, compose, catC, brn, manyIn
+  , fstC, sndC, unsafeNth, compose, catC, brn, manyIn, inj
 
   , module RoHs.Language.Types
   ) where
@@ -190,3 +190,8 @@ manyIn _ _ = error "manyIn"
 brn :: forall {a} {b} {d} {f} {c}. (Int, a) -> ((Int, b) -> c) -> ((Int, d) -> c) -> ((Int, f) -> c)
 brn (_, d) f g (k, v) = if n == (0::Int) then f (j, unsafeCoerce v) else g (j, unsafeCoerce v) where
   (n, j) = unsafeNth k d
+
+
+inj :: forall {a} {b}. (Int, a) -> (Int, b) -> (Int, b)
+inj (-1, _) kv    = kv
+inj (_, d) (k, v) = (unsafeNth k d, v)

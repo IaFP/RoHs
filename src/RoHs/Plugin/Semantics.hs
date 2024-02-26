@@ -321,10 +321,10 @@ inj0Core  (mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
   | (tys, ty) <- splitForAllTyVars oType                          -- tys      = [y, z]
   , (_invsFun, (_:_:dTy:ty_body:_)) <- splitTyConApp ty             -- ty       = d => V0 z -> V0 y
   , (_visFun, (_:_:_:argTy:resultTy:_)) <- splitTyConApp (ty_body)  -- ty_body  = [V0 y -> V0 z]
-  = do { fstCoreId <- findId mgs "fstC"
-       ; sndCoreId <- findId mgs "sndC"
-       ; unsafeCoerceNthCoreId <- findId mgs "unsafeNth"
-
+  = do { -- fstCoreId <- findId mgs "fstC"
+       -- ; sndCoreId <- findId mgs "sndC"
+       -- ; unsafeCoerceNthCoreId <- findId mgs "unsafeNth"
+         injId <- findId mgs "inj"
        ; let injFun :: CoreExpr
              injFun = mkCoreLams (tys ++ [d,ry]) (Cast body co)
 
@@ -339,18 +339,24 @@ inj0Core  (mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
              d = mkLocalId dn manyDataConTy dTy
              ry = mkLocalId ryn manyDataConTy argTy
 
-             v = Cast (Var ry) (mkCastCo argTy (mkTupleTy Boxed [intTy, anyType]))
+             dRepTy = mkTupleTy Boxed [intTy, anyType]
+             dRowRepTy = mkTupleTy Boxed [intTy, anyType]
 
-             n = mkCoreApps (Var fstCoreId) [Type intTy, Type anyType,  v]
+             -- v = Cast (Var ry) (mkCastCo argTy (mkTupleTy Boxed [intTy, anyType]))
 
-             s = mkCoreApps (Var sndCoreId) [Type intTy, Type anyType
-                                            , Cast (Var d) (mkCastCo dTy $ mkTupleTy Boxed [intTy, anyType])]
+             -- n = mkCoreApps (Var fstCoreId) [Type intTy, Type anyType,  v]
 
-             co = mkCastCo bodyTy resultTy
+             -- s = mkCoreApps (Var sndCoreId) [Type intTy, Type anyType
+             --                                , Cast (Var d) (mkCastCo dTy $ mkTupleTy Boxed [intTy, anyType])]
 
-             bodyTy = mkTupleTy Boxed [intTy, anyType]
+             co = mkCastCo dRowRepTy resultTy
+
+             -- bodyTy = mkTupleTy Boxed [intTy, anyType]
              body :: CoreExpr
-             body = mkCoreApps (Var unsafeCoerceNthCoreId) [Type anyType, Type (mkTupleTy Boxed [intTy, anyType]),  n, s]
+             body = mkCoreApps (Var injId) [ Type anyType, Type anyType
+                                           , Cast (Var d) (mkCastCo dTy dRepTy)
+                                           , Cast (Var ry) (mkCastCo argTy dRowRepTy)
+                                           ]
 
              debug_msg = text "inj0Core" <+> vcat [ text "Type:" <+> ppr oType
                                                   , text "dTy:" <+> ppr dTy
@@ -358,6 +364,6 @@ inj0Core  (mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
                                                   , text "resultTy:" <+> ppr resultTy
                                                   , ppr injFun ]
 
-       -- ; debugTraceMsg debug_msg
+       ; debugTraceMsg debug_msg
        ; return injFun }
   | otherwise = pprPanic "shouldn't happen inj0Core" (ppr oType)

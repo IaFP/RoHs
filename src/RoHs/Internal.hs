@@ -231,6 +231,7 @@ x7_0 :: Int; x7_1 :: Bool; x7_2 :: Int; x7_3 :: String
 -- identifies the constructor.
 
 inj :: (Int, a) -> (Int, b) -> (Int, b)
+inj (-1, _) d     = d
 inj (_, d) (k, v) = (unsafeNth k d, v)
 
 brn :: (Int, a) -> ((Int, b) -> c) -> ((Int, d) -> c) -> ((Int, f) -> c)

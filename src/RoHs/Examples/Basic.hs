@@ -61,8 +61,8 @@ bar1' = case0 @"x" id `brn0` case0 @"y" (\b -> if b then 0 else 1)
 answer_to_everything :: Int
 answer_to_everything = bar1' (inj0 (labV0 @"x" (42::Int)))
 
-
-
+qqqqq :: Int
+qqqqq = unlabR0 @"x" (labR0 @"x" 1)
 
 -- This is a *less* compelling argument against than I thought, but still
 -- concerned about the type argument to inj0.
