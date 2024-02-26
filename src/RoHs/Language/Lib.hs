@@ -20,7 +20,7 @@ module RoHs.Language.Lib (
   , brn0
   , unlabV0
   , inj0
-
+  , anaA0
   -- , con1
   -- , case1
 
@@ -37,11 +37,12 @@ It also exports the Primitives, so users must not explicitly import it
 
 import RoHs.Language.Types
 import RoHs.Language.Primitives
+
 import Data.Tuple
 import Unsafe.Coerce
+import Data.Proxy
 
-
-default (Int, Double)
+default (Int)
 
 -- and we can define
 
@@ -65,7 +66,9 @@ labV0   :: forall s {t}. t -> V0 (R '[s := t])
 brn0    :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
 unlabV0 :: forall s {t}. V0 (R '[s := t]) -> t
 inj0    :: forall y z. y ~<~ z => V0 y -> V0 z
-
+anaA0   :: forall c {z} {t}. All c z
+        => (forall s y {u}. (Plus (R '[s := u]) y z, c u) =>  Proxy s -> u -> t)
+        -> V0 z -> t
 
 labR0    = labR0_I
 unlabR0  = unlabR0_I
@@ -75,7 +78,7 @@ labV0    = labV0_I
 brn0     = brn0_I
 unlabV0  = unlabV0_I
 inj0     = inj0_I
-
+anaA0    = anaA0_I
 -- con1 :: forall s {f} {t} {z}. R '[s := f] ~<~ z => f t -> V1 z t
 -- con1 x = inj1 (labV1 @s x)
 

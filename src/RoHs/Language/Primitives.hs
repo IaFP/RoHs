@@ -30,59 +30,59 @@ import Data.Proxy
 
 
 -- Well this is potentially annoying...
-{-# OPAQUE labR0_I #-}
+-- {-# OPAQUE labR0_I #-}
 labR0_I :: forall s {t}. t -> R0 (R '[s := t])
 labR0_I = undefined
 
-{-# OPAQUE unlabR0_I #-}
+-- {-# OPAQUE unlabR0_I #-}
 unlabR0_I :: forall s {t}. R0 (R '[s := t]) -> t
 unlabR0_I = undefined
 
-{-# OPAQUE prj0_I #-}
+-- {-# OPAQUE prj0_I #-}
 prj0_I :: forall y z. y ~<~ z => R0 z -> R0 y
 prj0_I = undefined
 
-{-# OPAQUE cat0_I #-}
+-- {-# OPAQUE cat0_I #-}
 -- cat0 :: R0 y -> R0 z -> R0 (y ~+~ z)
 cat0_I :: forall {x} {y} {z}. Plus x y z => R0 x -> R0 y -> R0 z
 cat0_I = undefined
 
-{-# OPAQUE labV0_I #-}
+-- {-# OPAQUE labV0_I #-}
 labV0_I :: forall s {t}. t -> V0 (R '[s := t])
 labV0_I = undefined
 
-{-# OPAQUE brn0_I #-}
+-- {-# OPAQUE brn0_I #-}
 -- brn0 :: (V0 x -> t) -> (V0 y -> t) -> V0 (x ~+~ y) -> t
 brn0_I :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
 brn0_I = undefined
 
-{-# OPAQUE unlabV0_I #-}
+-- {-# OPAQUE unlabV0_I #-}
 unlabV0_I :: forall s {t}. V0 (R '[s := t]) -> t
 unlabV0_I = undefined
 
-{-# OPAQUE inj0_I #-}
+-- {-# OPAQUE inj0_I #-}
 inj0_I :: forall y z. y ~<~ z => V0 y -> V0 z
 inj0_I = undefined
 
-{-# OPAQUE ana0_I #-}
+-- {-# OPAQUE ana0_I #-}
 ana0_I :: forall z t.
         (forall s y {u}. (Plus (R '[s := u]) y z) => u -> t) ->
         V0 z -> t
 ana0_I _ = undefined
 
-{-# OPAQUE anaE0 #-}
-anaE0 :: forall phi {z} {t}.
+-- {-# OPAQUE anaE0_I #-}
+anaE0_I :: forall phi {z} {t}.
          (forall s y {u}. (Plus (R '[s := u]) y z) => phi u -> t) ->
          V0 (Each phi z) -> t
-anaE0 _ = undefined
+anaE0_I _ = undefined
 
-{-# OPAQUE anaA0 #-}
-anaA0 :: forall c {z} {t}.
+-- {-# OPAQUE anaA0_I #-}
+anaA0_I :: forall c {z} {t}.
          All c z =>
-         (forall s y {u}. (Plus (R '[s := u]) y z, c u) =>
-                           Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
+         (forall s y {u}. (Plus (R '[s := u]) y z, c u)
+                       =>  Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
       -> V0 z -> t
-anaA0 _ = undefined
+anaA0_I _ = undefined
 
 
 -- Sigh...

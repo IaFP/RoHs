@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHsPlugin #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -ddump-ds -ddump-simpl -dverbose-core2core -fplugin RoHs.Plugin #-}
-{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
+{-# OPTIONS -dverbose-core2core -ddump-ds -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
 
@@ -12,9 +12,10 @@ import RoHs.Language.Lib
 
 import Data.Proxy
 
+default (Int)
 
 singleton_foo_Int :: R0 (R '["x" := Int])
-singleton_foo_Int = labR0 @"x" (1 :: Int)
+singleton_foo_Int = labR0 @"x" 1
 
 singleton_foo_Bool :: R0 (R '["y" := Bool])
 singleton_foo_Bool  = labR0 @"y" True
@@ -89,7 +90,7 @@ test_foo b = (xcase `brn0` ycase) (con0 @"X" b) where
   xcase = case0 @"X" not
   ycase = case0 @"Y" id
 
-{-
+
 showV :: forall z. All Show z => V0 z -> String
 showV = anaA0 @Show (const show)
 
@@ -123,7 +124,7 @@ eqV v w = anaA0 @Eq g w where
 eqV' :: V0 (R '["x" := Int, "y" := Bool]) -> V0 (R '["x" := Int, "y" := Bool]) -> Bool
 eqV' = eqV
 
-
+{-
 fmapV :: forall a b z. All Functor z => (a -> b) -> V1 z a -> V1 z b
 fmapV f = anaA1 @Functor g where
 

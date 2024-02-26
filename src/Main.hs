@@ -18,8 +18,10 @@ import RoHs.Language.Lib
 import RoHs.Examples.Basic
 import RoHs.Plugin
 
+default (Int)
+
 s1 :: R0 (R '["x" := Int])
-s1 = labR0 @"x" (1::Int)
+s1 = labR0 @"x" 1
 
 s2 :: R0 (R '["x" := Bool])
 s2 = labR0 @"x" (True::Bool)
@@ -39,7 +41,8 @@ curried_labs y = s1 `cat0` y
 
 -- should_fail = curried_lables s3
 
-row_int_bool = s1 `cat0` s2
+row_int_bool  :: R0 (R' ["x" := Int, "y" := Bool])
+row_int_bool = s1 `cat0` s3
 
 main :: IO ()
 main = do putStrLn $ "s1 val" ++ (show (unlabR0 @"x" s1))

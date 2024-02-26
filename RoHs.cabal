@@ -55,7 +55,9 @@ common ghcopts
     ghc-options: -Wall
                  -- -ddump-rn-trace
                  -- -ddump-tc-trace
-                 -- -dcore-lint
+                 -dcore-lint
+                 -- -fexplict-call-stack
+
 
 library
     -- Import common warning flags.
@@ -98,36 +100,39 @@ library
     -- Base language which the package is written in.
     default-language: GHC2021
 
-executable RoHs-exe
+-- executable RoHs-exe
+--     import:           ghcopts
 
-    other-modules:      RoHs.Examples.Basic
-                        RoHs.Language.Lib
-                        RoHs.Language.Primitives
-                        RoHs.Language.Types
-                        RoHs.Plugin
-                        RoHs.Plugin.Core
-                        RoHs.Plugin.CoreUtils
-                        RoHs.Plugin.Semantics
-                        RoHs.Plugin.Source
-                        RoHs.Plugin.TC
+--     other-modules:      RoHs.Examples.Basic
+--                         RoHs.Language.Lib
+--                         RoHs.Language.Primitives
+--                         RoHs.Language.Types
+
+--                         RoHs.Plugin
+--                         RoHs.Plugin.Core
+--                         RoHs.Plugin.CoreUtils
+--                         RoHs.Plugin.Semantics
+--                         RoHs.Plugin.Source
+--                         RoHs.Plugin.TC
 
 
-    build-depends:    base ^>=4.18,
-                      ghc >=9.6.2,
-                      ghc-tcplugin-api ^>= 0.11.0.0,
-                      mtl ^>= 2.3,
-                      ghc-tcplugins-extra ^>= 0.4.5,
-                      syb ^>= 0.7,
-                      containers,
-                      RoHs
-    -- Directories containing source files.
-    hs-source-dirs:   src
+--     build-depends:    base ^>=4.18,
+--                       ghc >=9.6.2,
+--                       ghc-tcplugin-api ^>= 0.11.0.0,
+--                       mtl ^>= 2.3,
+--                       ghc-tcplugins-extra ^>= 0.4.5,
+--                       syb ^>= 0.7,
+--                       containers,
+--                       RoHs
+--     -- Directories containing source files.
+--     hs-source-dirs:   src
 
-    main-is: Main.hs
+--     main-is: Main.hs
 
-    -- Base language which the package is written in.
-    default-language: GHC2021
+--     -- Base language which the package is written in.
+--     default-language: GHC2021
 
+--     other-extensions: DataKinds, ConstraintKinds, TypeApplications, ImpredicativeTypes, TypeFamilyDependencies
 
 
 test-suite RoHs-test
@@ -141,7 +146,7 @@ test-suite RoHs-test
     -- other-modules: IllTyped.RowConcat
 
     -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
+    other-extensions: DataKinds, ConstraintKinds, TypeApplications, ImpredicativeTypes, TypeFamilyDependencies
 
     -- The interface type and version of the test suite.
     type:             exitcode-stdio-1.0
