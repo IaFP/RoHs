@@ -163,7 +163,7 @@ try_solving defs acc@(solved, unsolveds, equalities) wanteds =
      API.tcPluginTrace "--Plugin Solve Improvements--" (vcat [ ppr unsolveds
                                                              , ppr equalities
                                                              ])
-     if madeProgress (solved, solved') (equalities, equalities')
+     if madeProgress (solved, equalities) (solved', equalities')
      then foldlM (solve_trivial defs) acc' unsolveds
      else return acc
 
@@ -171,7 +171,9 @@ try_solving defs acc@(solved, unsolveds, equalities) wanteds =
         -- the first condition is obviously progress,
         -- the second one can enable more solving as
         -- we have discovered equalities that previously we did not know about
-  where madeProgress (s, s') (e, e') = length s' > length s || length e' > length e
+        -- It should not depend on the wanted constraints because the solver keeps
+        -- generating them
+  where madeProgress (s, e) (s', e') = length s' > length s || length e' > length e
 
 -- | Solves simple wanteds.
 --   By simple I mean the ones that do not give rise to new wanted constraints
@@ -228,7 +230,7 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
                 ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--"
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
                 ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
-                ; return $ mergePluginWork acc ([ ( mkPlusEvTerm ps predTy, ct) ]
+                ; return $ mergePluginWork acc ([ (mkPlusEvTerm ps predTy, ct) ]
                                                 , [API.mkNonCanonical nw] -- no new wanteds
                                                 , [(yTVar, y0)] -- new equalilites
                                                 ) }
@@ -299,7 +301,7 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , Just (r_tycon, [kx, assocs_x])<- API.splitTyConApp_maybe x
   , Just (_, [ky, assocs_y])<- API.splitTyConApp_maybe y
   , API.eqType kx ky -- x and y should be of the same row kinds
-  , Just zTVar <- getTyVar_maybe z
+  , Just zTVar <- getTyVar_maybe z  -- z is a type variable
   , let xs = sortAssocs $ unfold_list_type_elems assocs_x
   , let ys = sortAssocs $ unfold_list_type_elems assocs_y
   , let zs = sortAssocs (xs ++ ys)
@@ -310,11 +312,13 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
                                                                     ])
         ; let rowAssocKi = mkTyConApp rowAssocTyCon [kx]
               z0 = API.mkTyConApp r_tycon [kx,  mkPromotedListTy rowAssocKi zs]
+        ; nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy zTVar) z0-- (API.substType [(zTVar, z0)] predTy)
         ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
+        ; API.tcPluginTrace "Generated new ct" (ppr nw)
         ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--"
              (text "computed" <+> ppr zTVar <+> text "=:=" <+> ppr z0)
 
-        ; return $ mergePluginWork acc ([(mkPlusEvTerm ps predTy, ct)], [], [(zTVar, z0)])
+        ; return $ mergePluginWork acc ([(mkPlusEvTerm ps predTy, ct)], [API.mkNonCanonical nw], [(zTVar, z0)])
         }
 
 
@@ -340,16 +344,11 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , let xs = sortAssocs $ unfold_list_type_elems assocs_x
   , let ys = sortAssocs $ unfold_list_type_elems assocs_y
   , API.eqType kx ky -- we are not having hetrogenous row concat
-  = case checkSubsetEv xs ys of
-      Just is ->
-        do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--"
+  , Just is <- checkSubsetEv xs ys
+  =  do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--"
                                (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr is ])
-           ; return $ mergePluginWork acc ([(mkLtEvTerm is predTy, ct)], [], []) }
-      Nothing ->
-        do { API.tcPluginTrace "--Plugin solving ~<~ unsolved--"
-                               (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys])
-           ; return $ mergePluginWork acc ([], [ct], []) } -- no need to actually throw error here
-                           -- it might fail down the tc pipleline anyway with a good error message
+        ; return $ mergePluginWork acc ([(mkLtEvTerm is predTy, ct)], [], []) }
+
 
   -- Handles the case where we have [W] (R [x := t] ~+~ r) ~#  (R [x := t, y := u])
   -- This just emits the equality constraint [W] r ~# R [y := u]
@@ -375,7 +374,6 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
                                        , [(yTVar, y0)])
        }
 
-
   -- Solving for All constraints
   | predTy <- API.ctPred ct
   , Just (clsCon, [_, cls, row]) <- API.splitTyConApp_maybe predTy
@@ -395,7 +393,7 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (vcat [ppr ct
                                                                                 , text "acc:" <+> ppr acc ])
-                   return acc
+                   return $ mergePluginWork acc ([], [ct], [])
 
 unzipAssocList :: API.TcType -> Maybe ([API.TcType], [API.TcType])
 unzipAssocList t = unzip <$> mapM openAssoc (unfold_list_type_elems t) where
@@ -521,7 +519,6 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
   | otherwise
   = do API.tcPluginTrace "other tyfam" (ppr tys)
        pure API.TcPluginNoRewrite
-
 
 
 -- | get labels from an assoc

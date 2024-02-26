@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHsPlugin #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -ddump-ds -ddump-simpl -dverbose-core2core -fplugin RoHs.Plugin #-}
-{-# OPTIONS -dverbose-core2core -ddump-ds -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
+{-# OPTIONS -dverbose-core2core -ddump-ds -ddump-tc-trace -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
 
@@ -61,8 +61,8 @@ bar1' = case0 @"x" id `brn0` case0 @"y" (\b -> if b then 0 else 1)
 answer_to_everything :: Int
 answer_to_everything = bar1' (inj0 (labV0 @"x" (42::Int)))
 
-qqqqq :: Int
-qqqqq = unlabR0 @"x" (labR0 @"x" 1)
+-- qqqqq :: _
+qqqqq = brn0 (case0 @"x" id) (case0 @"y" (\b -> if b then 0 else 1))
 
 -- This is a *less* compelling argument against than I thought, but still
 -- concerned about the type argument to inj0.
@@ -120,10 +120,8 @@ eqV v w = anaA0 @Eq g w where
                   =>  Proxy s -> t -> Bool
   g _ x = (case0 @s (\y -> x == y) `brn0` const False) v
 
-
 eqV' :: V0 (R '["x" := Int, "y" := Bool]) -> V0 (R '["x" := Int, "y" := Bool]) -> Bool
 eqV' = eqV
-
 {-
 fmapV :: forall a b z. All Functor z => (a -> b) -> V1 z a -> V1 z b
 fmapV f = anaA1 @Functor g where

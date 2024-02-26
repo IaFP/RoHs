@@ -41,10 +41,10 @@ curried_labs y = s1 `cat0` y
 
 -- should_fail = curried_lables s3
 
-row_int_bool  :: R0 (R' ["x" := Int, "y" := Bool])
+row_int_bool  :: R0 (R  '["x" := Int, "y" := Bool])
 row_int_bool = s1 `cat0` s3
 
 main :: IO ()
-main = do putStrLn $ "s1 val" ++ (show (unlabR0 @"x" s1))
-          putStrLn $ "s3 val" ++ (show (unlabR0 @"y" s3))
-          putStrLn $ "answer to everything" ++ (show answer_to_everything)
+main = do putStrLn $ "s1 val: " ++ (show (unlabR0 @"x" s1))
+          putStrLn $ "s3 val: " ++ (show (unlabR0 @"y" s3))
+          putStrLn $ "answer to everything " ++ (show answer_to_everything)
