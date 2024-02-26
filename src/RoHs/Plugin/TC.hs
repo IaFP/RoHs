@@ -408,30 +408,35 @@ unzipAssocList t = unzip <$> mapM openAssoc (unfold_list_type_elems t) where
     | otherwise
     = Nothing
 
+-- Exposing this definition from GHC.Core.Make...
+mkCoreBoxedTuple :: [CoreExpr] -> CoreExpr
+mkCoreBoxedTuple cs = mkCoreConApps (tupleDataCon API.Boxed (length cs))
+                      (map (Type . exprType) cs ++ cs)    
+
 mkLtEvTerm :: [Int] -> Type -> API.EvTerm
 mkLtEvTerm is predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
   n = length is
-  tupleTy = mkTupleTy API.Boxed [intTy, mkTupleTy API.Boxed (replicate n intTy)]
-  tuple = mkCoreTup [mkCoreInt n, mkCoreTup (map mkCoreInt is)]
+  tupleTy = mkTupleTy1 API.Boxed [intTy, mkTupleTy1 API.Boxed (replicate n intTy)]
+  tuple = mkCoreBoxedTuple [mkCoreInt n, mkCoreBoxedTuple (map mkCoreInt is)]
 
 mkPlusEvTerm :: [(Int, Int)] -> Type -> API.EvTerm
 mkPlusEvTerm pairs predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
   n = length pairs
-  tupleTy = mkTupleTy API.Boxed [intTy, mkTupleTy API.Boxed (replicate n (mkTupleTy API.Boxed [intTy, intTy]))]
-  tuple = mkCoreTup [mkCoreInt n, mkCoreTup [mkCoreTup [mkCoreInt x, mkCoreInt y] | (x, y) <- pairs]]
+  tupleTy = mkTupleTy1 API.Boxed [intTy, mkTupleTy1 API.Boxed (replicate n (mkTupleTy1 API.Boxed [intTy, intTy]))]
+  tuple = mkCoreBoxedTuple [mkCoreInt n, mkCoreBoxedTuple [mkCoreBoxedTuple [mkCoreInt x, mkCoreInt y] | (x, y) <- pairs]]
 
 mkReflEvTerm :: Type -> API.EvTerm
 mkReflEvTerm predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
-  tupleTy = mkTupleTy API.Boxed [intTy, unitTy]
-  tuple = mkCoreTup [mkCoreInt (-1), mkCoreTup []]
+  tupleTy = mkTupleTy1 API.Boxed [intTy, unitTy]
+  tuple = mkCoreBoxedTuple [mkCoreInt (-1), mkCoreBoxedTuple []]
 
 mkAllEvTerm :: [API.CtEvidence] -> Type -> API.EvTerm
 mkAllEvTerm evs predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
   (evVars, predTys) = unzip [(evVar, predTy) | API.CtWanted predTy (API.EvVarDest evVar) _ _ <- evs]
   evTuple = mkCoreConApps (cTupleDataCon (length evVars)) (map (Type . exprType) (map Var evVars) ++ map Var evVars)
   evTupleTy = mkConstraintTupleTy predTys
-  tupleTy = mkTupleTy API.Boxed [intTy, intTy]
-  tuple = mkCoreTup [mkCoreInt (length evVars), Cast evTuple (mkCoercion API.Representational evTupleTy intTy)]
+  tupleTy = mkTupleTy1 API.Boxed [intTy, intTy]
+  tuple = mkCoreBoxedTuple [mkCoreInt (length evVars), Cast evTuple (mkCoercion API.Representational evTupleTy intTy)]
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
 mkCoercion = API.mkPluginUnivCo "Proven by RoHs.Plugin.TC"
