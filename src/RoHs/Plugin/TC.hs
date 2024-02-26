@@ -9,7 +9,7 @@
 {-# HLINT ignore "Use camelCase" #-}
 module RoHs.Plugin.TC (tcPlugin) where
 
-import qualified GHC.Plugins as GHC (mkLocalId, mkPrimEqPred)
+import qualified GHC.Plugins as GHC
 import GHC.Utils.Outputable
 
 -- ghc-tcplugin-api
@@ -24,11 +24,6 @@ import GHC.Core.Type
 import GHC.Core.Predicate
 import GHC.Core.Utils (exprType)
 
-import GHC.Types.Literal
-import GHC.Types.Name      ( mkInternalName, tcName )
-import GHC.Types.Name.Occurrence   ( mkOccName )
-import GHC.Types.Unique
-import GHC.Types.SrcLoc
 import GHC.Builtin.Types
 
 
@@ -105,15 +100,10 @@ findModule moduleName pkgName_mb = do
 findTypesModule :: API.MonadTcPlugin m => m API.Module
 findTypesModule = findModule "RoHs.Language.Types" Nothing
 
-
-findPreludeModule :: API.MonadTcPlugin m => m API.Module
-findPreludeModule = findModule "GHC.Base" (Just "base")
-
 tcPluginInit :: API.TcPluginM API.Init PluginDefs
 tcPluginInit = do
   API.tcPluginTrace "--Plugin Init--" empty
   typesModule    <- findTypesModule
-  preludeModule  <- findPreludeModule
 
   rowPlusTF      <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "~+~")
   rowTyCon       <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "Row")
@@ -220,21 +210,19 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , let zs = sortAssocs $ unfold_list_type_elems assocs_z
   , Just yTVar <- getTyVar_maybe y
   -- y is just a type variable which we will solve for
+  , Just _is <- checkSubsetEv xs zs
+  , let ys = sortAssocs $ setDiff xs zs
+  , let rowAssocKi = mkTyConApp rowAssocTyCon [k]
+  , let y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
+  , Just ps <- checkConcatEv xs ys zs
   = do { API.tcPluginTrace "--Plugin solving improvement for Plus with Eq emit --" (vcat [ ppr predTy ])
-       ; case checkSubsetEv xs zs of
-           Just _is ->
-             do { let ys = sortAssocs $ setDiff xs zs
-                      rowAssocKi = mkTyConApp rowAssocTyCon [k]
-                      y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
-                      Just ps = checkConcatEv xs ys zs   -- know this will succeed, because we constructed `ys` accordingly; ought to use `_is`, but can't be arsed...
-                ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--"
+       ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--"
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
-                ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
-                ; return $ mergePluginWork acc ([ (mkPlusEvTerm ps predTy, ct) ]
-                                                , [API.mkNonCanonical nw] -- no new wanteds
-                                                , [(yTVar, y0)] -- new equalilites
-                                                ) }
-           Nothing -> return $ mergePluginWork acc ([], [ct], [])
+       ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
+       ; return $ mergePluginWork acc ([ (mkPlusEvTerm ps predTy, ct) ]
+                                      , [API.mkNonCanonical nw] -- no new wanteds
+                                      , [(yTVar, y0)] -- new equalilites
+                                      )
        }
   -- Handles the case where x is unknown but y and z is known
   -- technically this is solvable by swapping x and y from the previous case, but i'm afraid
@@ -260,7 +248,7 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
              y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
        ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--"
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
-       ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
+       ; nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
        ; return $ mergePluginWork acc ([ ( mkPlusEvTerm ps predTy, ct) ]
                                       , [API.mkNonCanonical nw] -- no new wanteds
                                       , [(yTVar, y0)] -- new equalilites
@@ -399,17 +387,12 @@ unzipAssocList :: API.TcType -> Maybe ([API.TcType], [API.TcType])
 unzipAssocList t = unzip <$> mapM openAssoc (unfold_list_type_elems t) where
 
   openAssoc :: API.TcType -> Maybe (API.TcType, API.TcType)
-  openAssoc t
-    | Just (_assocCon, [_, lhs, rhs]) <- API.splitTyConApp_maybe t
-    -- check that assocCon is actually `:=`
+  openAssoc tup
+    | Just (_assocCon, [_, lhs, rhs]) <- API.splitTyConApp_maybe tup
+     -- check that assocCon is actually `:=`
     = return (lhs, rhs)
     | otherwise
     = Nothing
-
--- Exposing this definition from GHC.Core.Make...
-mkCoreBoxedTuple :: [CoreExpr] -> CoreExpr
-mkCoreBoxedTuple cs = mkCoreConApps (tupleDataCon API.Boxed (length cs))
-                      (map (Type . exprType) cs ++ cs)    
 
 mkLtEvTerm :: [Int] -> Type -> API.EvTerm
 mkLtEvTerm is predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where

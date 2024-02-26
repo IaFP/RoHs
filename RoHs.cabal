@@ -72,14 +72,16 @@ library
                       RoHs.Examples.Basic
 
     -- Modules included in this library but not exported.
-    other-modules:    RoHs.Plugin.Source
-                      RoHs.Plugin.TC
-                      RoHs.Plugin.Core
+    other-modules:
 
                       RoHs.Language.Primitives
-                      RoHs.Plugin.Semantics
-                      RoHs.Plugin.CoreUtils
 
+
+                      RoHs.Plugin.Core
+                      RoHs.Plugin.CoreUtils
+                      RoHs.Plugin.Semantics
+                      RoHs.Plugin.Source
+                      RoHs.Plugin.TC
 
 
     -- LANGUAGE extensions used by modules in this package.
