@@ -4,8 +4,8 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHs.Plugin #-}
--- {-# OPTIONS -O2 -fforce-recomp -dcore-lint -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
-{-# OPTIONS -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -dcore-lint -ddump-tc-trace -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
+-- {-# OPTIONS -fplugin RoHs.Plugin #-}
 
 module RoHs.Language.Lib (
     case0
@@ -27,7 +27,7 @@ module RoHs.Language.Lib (
   -- , case1
 
   -- * engineering hell
-  , fstC, sndC, unsafeNth, compose, catC, brn, manyIn, inj, ana
+  , fstC, sndC, unsafeNth, compose, catC, brn, manyIn, oneIn, plusE, inj
 
   , module RoHs.Language.Types
   ) where
@@ -69,7 +69,7 @@ brn0    :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
 unlabV0 :: forall s {t}. V0 (R '[s := t]) -> t
 inj0    :: forall y z. y ~<~ z => V0 y -> V0 z
 anaA0   :: forall c {z} {t}. All c z
-        => (forall s y {u}. (Plus (R '[s := u]) y z, R '[s := u] ~<~ z, c u) =>  Proxy s -> u -> t)
+        => (forall s y {u}. (Plus (R '[s := u]) y z, R '[s := u] ~<~ z, y ~<~ z, c u) =>  Proxy s -> u -> t)
         -> V0 z -> t
 
 labR0    = labR0_I
@@ -198,15 +198,15 @@ inj :: forall {a} {b}. (Int, a) -> (Int, b) -> (Int, b)
 inj (-1, _) kv    = kv
 inj (_, d) (k, v) = (unsafeNth k d, v)
 
-
+{-
 ana :: forall {c} {z} {t}. (Int, c)                             -- `All c z` dictionary (size, tuple of dictionaries)
 -- :: forall c {z} {t}. All c z
-    -> (forall {e1} {e2} {e3} {e4} {b}. (Int, e1)              -> (Int, e2)      -> (Int, e3) -> e4 ->           b -> t)
---                                      (Plus (R '[s := u]) y z, R '[s := u] ~<~ z,  y ~<~ z,    c u) -> proxy -> u -> t
+    -> (forall {e1} {e2} {e3} {e4} {e5} {u}. (Int, e1)              -> (Int, e2)      -> (Int, e3) -> e4 ->    e5      u -> t)
+--      forall s y u                    (Plus (R '[s := u]) y z, R '[s := u] ~<~ z,  y ~<~ z,    c u) -> proxy -> u -> t
     -> (Int, z) -> t                           -- Actual variant to final result
 --      -> V0 z -> t
 ana (n, allE) f (k, v) = f (plusE n k) (oneIn k) (manyIn n k) (unsafeNth k allE) (unsafeCoerce v)
-
+-}
 
 oneIn :: Int -> (Int, a)
 oneIn k = (1, unsafeCoerce (MkSolo k))

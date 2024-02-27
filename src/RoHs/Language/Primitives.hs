@@ -64,25 +64,26 @@ unlabV0_I = undefined
 inj0_I :: forall y z. y ~<~ z => V0 y -> V0 z
 inj0_I = undefined
 
--- {-# OPAQUE ana0_I #-}
-ana0_I :: forall z t.
-        (forall s y {u}. (Plus (R '[s := u]) y z) => u -> t) ->
-        V0 z -> t
-ana0_I _ = undefined
-
--- {-# OPAQUE anaE0_I #-}
-anaE0_I :: forall phi {z} {t}.
-         (forall s y {u}. (Plus (R '[s := u]) y z) => phi u -> t) ->
-         V0 (Each phi z) -> t
-anaE0_I _ = undefined
-
 -- {-# OPAQUE anaA0_I #-}
-anaA0_I :: forall c {z} {t}.
-         All c z =>
-         (forall s y {u}. (Plus (R '[s := u]) y z, R '[s := u] ~<~ z, c u)
-                       =>  Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
-      -> V0 z -> t
+anaA0_I :: forall {c} {z} {t}.
+           All c z
+        => (forall {s} {y} {u}. (Plus (R '[s := u]) y z, R '[s := u] ~<~ z, y ~<~ z, c u)
+                            =>  Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
+        -> V0 z -> t
 anaA0_I _ = undefined
+
+
+-- -- {-# OPAQUE ana0_I #-}
+-- ana0_I :: forall z t.
+--         (forall s y {u}. (Plus (R '[s := u]) y z) => u -> t) ->
+--         V0 z -> t
+-- ana0_I _ = undefined
+
+-- -- {-# OPAQUE anaE0_I #-}
+-- anaE0_I :: forall phi {z} {t}.
+--          (forall s y {u}. (Plus (R '[s := u]) y z) => phi u -> t) ->
+--          V0 (Each phi z) -> t
+-- anaE0_I _ = undefined
 
 
 -- Sigh...

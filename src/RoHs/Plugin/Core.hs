@@ -60,7 +60,7 @@ instance Transform CoreExpr where
   tx (mgs, pm) (Var i) = case List.lookup (getOccFS i) pm of
                           Nothing -> do { -- putMsg (text "not found" <+> ppr i);
                                           return $ Var i }
-                          Just e -> do { -- putMsg (text "found" <+> ppr i);
+                          Just e -> do { putMsg (text "found" <+> ppr i);
                                          e (mgs, idType i) }
 
   tx pm (Lam arg body) = Lam arg <$> tx pm body
