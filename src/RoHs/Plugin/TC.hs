@@ -370,7 +370,7 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , rCon == rTyCon
   , Just (ls, ts) <- unzipAssocList assocs
   = do { API.tcPluginTrace "1 Found instance of All with class and args" (ppr (cls, ls, ts))
-       ; wanteds <- sequence [API.newWanted (API.ctLoc ct) (AppTy cls t) | t <- ts]
+       ; wanteds <- sequence [API.newWanted (API.ctLoc ct) (AppTy cls t) | t <- reverse ts]
        ; API.tcPluginTrace "2 Generating new wanteds" (ppr wanteds)
        ; return $ mergePluginWork acc ([(mkAllEvTerm wanteds predTy, ct)], map API.mkNonCanonical wanteds, [])
        }
