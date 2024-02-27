@@ -21,11 +21,13 @@ module RoHs.Language.Lib (
   , unlabV0
   , inj0
   , anaA0
+
+
   -- , con1
   -- , case1
 
   -- * engineering hell
-  , fstC, sndC, unsafeNth, compose, catC, brn, manyIn, inj
+  , fstC, sndC, unsafeNth, compose, catC, brn, manyIn, inj, ana
 
   , module RoHs.Language.Types
   ) where
@@ -67,7 +69,7 @@ brn0    :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
 unlabV0 :: forall s {t}. V0 (R '[s := t]) -> t
 inj0    :: forall y z. y ~<~ z => V0 y -> V0 z
 anaA0   :: forall c {z} {t}. All c z
-        => (forall s y {u}. (Plus (R '[s := u]) y z, c u) =>  Proxy s -> u -> t)
+        => (forall s y {u}. (Plus (R '[s := u]) y z, R '[s := u] ~<~ z, c u) =>  Proxy s -> u -> t)
         -> V0 z -> t
 
 labR0    = labR0_I
@@ -195,3 +197,29 @@ brn (_, d) f g (k, v) = if n == (0::Int) then f (j, unsafeCoerce v) else g (j, u
 inj :: forall {a} {b}. (Int, a) -> (Int, b) -> (Int, b)
 inj (-1, _) kv    = kv
 inj (_, d) (k, v) = (unsafeNth k d, v)
+
+
+ana :: forall {c} {z} {t}. (Int, c)                             -- `All c z` dictionary (size, tuple of dictionaries)
+-- :: forall c {z} {t}. All c z
+    -> (forall {e1} {e2} {e3} {e4} {b}. (Int, e1)              -> (Int, e2)      -> (Int, e3) -> e4 ->           b -> t)
+--                                      (Plus (R '[s := u]) y z, R '[s := u] ~<~ z,  y ~<~ z,    c u) -> proxy -> u -> t
+    -> (Int, z) -> t                           -- Actual variant to final result
+--      -> V0 z -> t
+ana (n, allE) f (k, v) = f (plusE n k) (oneIn k) (manyIn n k) (unsafeNth k allE) (unsafeCoerce v)
+
+
+oneIn :: Int -> (Int, a)
+oneIn k = (1, unsafeCoerce (MkSolo k))
+
+plusE :: forall {a}. Int -> Int -> (Int, a)
+plusE 2 k = (2, unsafeCoerce (pick 0 k, pick 1 k))
+plusE 3 k = (3, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k))
+plusE 4 k = (4, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k, pick 3 k))
+plusE 5 k = (5, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k, pick 3 k, pick 4 k))
+plusE 6 k = (5, unsafeCoerce (pick 0 k, pick 1 k, pick 2 k, pick 3 k, pick 4 k, pick 5 k))
+plusE _ _ = error "plusE out of patience"
+
+pick :: Int -> Int -> (Int, Int)
+pick j k | j == k    = (0, 0)
+         | j < k     = (1, j)
+         | otherwise = (1, j - 1)

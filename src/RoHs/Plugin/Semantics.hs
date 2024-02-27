@@ -22,12 +22,12 @@ primMap = [ (fsLit "labR0_I" ,   labR0Core)    -- :: forall s {t}. t -> R0 (R '[
 
           , (fsLit "labV0_I",    labV0Core)    -- :: forall s {t}. t -> V0 (R '[s := t])
           , (fsLit "brn0_I",     brn0Core)     -- :: forall x y z t. Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
-          , (fsLit "unlabV0_I",  unlabV0Core)  -- unlabV0 :: forall s {t}. V0 (R '[s := t]) -> t
-          , (fsLit "inj0_I",     inj0Core)     --
-          , (fsLit "ana0_I",     ana0Core)
+          , (fsLit "unlabV0_I",  unlabV0Core)  -- :: forall s {t}. V0 (R '[s := t]) -> t
+          , (fsLit "inj0_I",     inj0Core)     -- :: forall y z. y ~<~ z => V0 y -> V0 z
+          , (fsLit "anaA0_I",     ana0Core)     -- :: forall c {z} {t}. All c z
+                                               --      => (forall s y {u}. (Plus (R '[s := u]) y z, c u) =>  Proxy s -> u -> t)
+                                               --      -> V0 z -> t
           ]
-
-ana0Core = mkIdCore
 
 mkIdCore :: (ModGuts, Type) -> CoreM CoreExpr
 mkIdCore (_, oType) = return $ Cast (mkCoreLams [a, x] (Var x)) (mkCastCo idTy oType)
@@ -48,6 +48,67 @@ mkIdCore (_, oType) = return $ Cast (mkCoreLams [a, x] (Var x)) (mkCastCo idTy o
     -- \forall a. a -> a
     idTy :: Type
     idTy = mkForAllTy (mkForAllTyBinder Inferred a) $ mkVisFunTy manyDataConTy (mkTyVarTy a) (mkTyVarTy a)
+
+
+-- :: forall c {z} {t}. All c z
+--      => (forall s y {u}. (Plus (R '[s := u]) y z, R '[s := t] ~<~ z, y ~<~ z, c u) =>  Proxy s -> u -> t)
+--      -> V0 z -> t
+ana0Core (mgs, oType)
+  | (tyVars, ty) <- splitForAllTyVars oType     -- tyVars = [c, z, t]
+  , (tys, resultTy) <- splitFunTys ty           -- [forall ... , V0 z], t
+  , [dAllTy, fTy, vzTy] <- fmap scaledThing tys
+  = do { anaId <- findId mgs "ana"
+
+
+       ; let ana0Fun = mkCoreLams (tyVars ++ [dId, fId, vId]) body
+             dn, fn, vn :: Name
+             dn = mkName 0 "dall"
+             fn = mkName 1 "f"
+             vn = mkName 2 "vz"
+
+             dId = mkLocalId dn manyDataConTy dAllTy
+             fId = mkLocalId fn  manyDataConTy fTy
+             vId = mkLocalId vn  manyDataConTy vzTy
+
+
+             dRepTy = mkTupleTy Boxed [intTy, anyType]
+             vRepTy = mkTupleTy Boxed [intTy, anyType]
+
+             esn = [mkName x ("e" ++ show x) | x <- [1..4]]
+             eIds = [mkLocalId en manyDataConTy liftedTypeKind | en <- esn]
+
+             bsn = mkName 0 "b"
+             bId = mkLocalId bsn manyDataConTy liftedTypeKind
+
+             --      f :: forall s y {u}. (Plus ... , c u) => Proxy s -> u -> t
+             -- fRepTy :: forall e1, e2, e3, e4, b. (Int, e1) -> (Int, e2) -> (Int, e3) -> e4 -> b -> t)
+             fRepTy = mkForAllTys (mkForAllTyBinders Inferred eIds) $
+                      mkVisFunTysMany ([ mkTupleTy Boxed [intTy, mkTyVarTy e] | e <- eIds] ++ [mkTyVarTy bId])  resultTy
+
+             body :: CoreExpr
+             body = mkCoreApps (Var anaId) [Type anyType, Type anyType, Type resultTy
+                                           , Cast (Var dId) (mkCastCo dAllTy dRepTy)
+                                           , mkCast (Var fId) (mkCastCo fTy fRepTy) -- most likey needs a cast
+                                           , Cast (Var vId) (mkCastCo vzTy vRepTy)
+                                           ]
+
+             debug_msg = text "ana0Fun" <+> vcat [ text "Type" <+> ppr oType
+                                                 , text "TyBnds"   <+> ppr tyVars
+                                                 , text "argTys"    <+> ppr tys
+                                                 , text "resultTy" <+> ppr resultTy
+                                                 , text "fRepTy" <+> ppr fRepTy
+                                                 , ppr ana0Fun
+                                                 ]
+       ; debugTraceMsg debug_msg
+       ; return ana0Fun
+
+       }
+
+  | otherwise = pprPanic "shouldn't happen ana0Core" (ppr oType)
+
+
+    where
+
 
 -- :: forall x y z t. Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
 brn0Core (mgs, oType)
@@ -319,7 +380,6 @@ cat0Core  (mgs, oType)                                    -- :: oType = forall x
        }
   | otherwise = pprPanic "shouldn't happen cat0Core" (ppr oType)
 
--- inj0Core :: Type -> CoreM CoreExpr
 -- injections go from smaller rows to bigger rows
 inj0Core  (mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
   | (tys, ty) <- splitForAllTyVars oType                          -- tys      = [y, z]
@@ -346,16 +406,8 @@ inj0Core  (mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
              dRepTy = mkTupleTy Boxed [intTy, anyType]
              dRowRepTy = mkTupleTy Boxed [intTy, anyType]
 
-             -- v = Cast (Var ry) (mkCastCo argTy (mkTupleTy Boxed [intTy, anyType]))
-
-             -- n = mkCoreApps (Var fstCoreId) [Type intTy, Type anyType,  v]
-
-             -- s = mkCoreApps (Var sndCoreId) [Type intTy, Type anyType
-             --                                , Cast (Var d) (mkCastCo dTy $ mkTupleTy Boxed [intTy, anyType])]
-
              co = mkCastCo dRowRepTy resultTy
 
-             -- bodyTy = mkTupleTy Boxed [intTy, anyType]
              body :: CoreExpr
              body = mkCoreApps (Var injId) [ Type anyType, Type anyType
                                            , Cast (Var d) (mkCastCo dTy dRepTy)

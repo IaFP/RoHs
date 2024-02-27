@@ -79,7 +79,7 @@ anaE0_I _ = undefined
 -- {-# OPAQUE anaA0_I #-}
 anaA0_I :: forall c {z} {t}.
          All c z =>
-         (forall s y {u}. (Plus (R '[s := u]) y z, c u)
+         (forall s y {u}. (Plus (R '[s := u]) y z, R '[s := u] ~<~ z, c u)
                        =>  Proxy s -> u -> t)  -- Assuming I'll need proxies for same reason as below
       -> V0 z -> t
 anaA0_I _ = undefined
