@@ -4,8 +4,8 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHs.Plugin #-}
-{-# OPTIONS -fforce-recomp -dcore-lint -ddump-tc-trace -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
--- {-# OPTIONS -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-tc-trace -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
+{-# OPTIONS -fforce-recomp  -fplugin RoHs.Plugin #-}
 
 module RoHs.Language.Lib (
     case0

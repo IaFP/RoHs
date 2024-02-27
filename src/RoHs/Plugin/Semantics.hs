@@ -83,50 +83,10 @@ ana0Core (mgs, oType)
 
              (f_tyVars, f_plusdTy, f_leq1, f_leq2, cuTy, proxyTy, uTy) = decomp fTy
 
-             nId, allEId, kId, vId :: Id
-             nId = mkLocalId (mkName 0 "n") manyDataConTy intTy
-             allEId = mkLocalId (mkName 1 "allE") manyDataConTy anyType
-             kId = mkLocalId (mkName 2 "k") manyDataConTy intTy
-             vVar = mkLocalId (mkName 3 "v") manyDataConTy anyType
-
-             n = mkCoreApps (Var fstId) [Type intTy, Type anyType, dAllrep]
-             allE = mkCoreApps (Var sndId) [Type intTy, Type anyType, dAllrep]
-             k = mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]
-             v = mkCoreApps (Var sndId) [Type intTy, Type anyType, vrep]
-
-             bndrs = [(nId, n), (allEId, allE), (kId, k), (vVar, v)]
-
-             farg_plusId, farg_leq1Id, farg_leq2Id, farg_cuId, farg_proxyId, farg_uId :: Id
-             farg_plus, farg_leq1, farg_leq2, farg_cu, farg_proxy, farg_u :: CoreExpr
-
-
-             farg_plusId = mkLocalId (mkName 4 "$dPlus") manyDataConTy ((f_plusdTy))
-             farg_leq1Id = mkLocalId (mkName 5 "$dleq1") manyDataConTy (substTyAddInScope subst $ f_leq1)
-             farg_leq2Id = mkLocalId (mkName 6 "$dleq2") manyDataConTy (substTyAddInScope subst $ f_leq2)
-             farg_cuId   = mkLocalId (mkName 7 "$dcu") manyDataConTy cuTy
-             farg_proxyId = mkLocalId (mkName 8 "proxy") manyDataConTy proxyTy
-             farg_uId  = mkLocalId (mkName 9 "u") manyDataConTy uTy
-
-
-             farg_plus = Cast (mkCoreApps (Var plusE)  [Type anyType, substExpr subst (Var nId), Var kId]) (mkCastCo dAllRepTy f_plusdTy)
-             farg_leq1 = Cast (mkCoreApps (Var oneIn)  [Type anyType, Var kId]) (mkCastCo dAllRepTy f_leq1) -- leq1
-             farg_leq2 = Cast (mkCoreApps (Var manyIn) [Type anyType, Var nId, Var kId]) (mkCastCo dAllRepTy f_leq2) -- leq2
-             farg_cu   = Cast (mkCoreApps (Var unsafeNth) [Type anyType, Type anyType, Var kId, Var allEId]) (mkCastCo dAllRepTy cuTy)
-             farg_proxy = Var farg_proxyId -- not used so making this up
-             farg_u = Cast (Var vVar) (mkCastCo anyType uTy)
-
-             fargbndrs = [ (farg_plusId, farg_plus)
-                             , (farg_leq1Id, farg_leq1)
-                             , (farg_leq2Id, farg_leq2)
-                             , (farg_cuId, farg_cu)
-                             , (farg_proxyId, farg_proxy)
-                             , (farg_uId, farg_u) ]
-
-
              subst = zipTvSubst f_tyVars ([ anyTypeOfKind (idType $ f_tyVars !! 0)
                                           , anyTypeOfKind (idType $ f_tyVars !! 1)
                                           , anyTypeOfKind (idType $ f_tyVars !! 2) ])-- zipTvSubst f_tyVars (fmap mkTyVarTy f_tyVars)
-
+             -- This is ugly, but meh.
              body :: CoreExpr
              body = (mkCoreApps (Var fId) ([ Type (anyTypeOfKind (idType $ f_tyVars !! 0))
                                            , Type (anyTypeOfKind (idType $ f_tyVars !! 1))
