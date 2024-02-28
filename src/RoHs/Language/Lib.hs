@@ -1,12 +1,12 @@
-{-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications #-}
+{-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications, PolyKinds #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-tc-trace -fprint-explicit-kinds -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-tc-trace -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
-{-# OPTIONS -fforce-recomp -dcore-lint -ddump-tc-trace -fprint-explicit-kinds -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
--- {-# OPTIONS -fforce-recomp  -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -fplugin RoHs.Plugin -fplugin-opt debug #-}
 
 module RoHs.Language.Lib (
 
@@ -89,12 +89,16 @@ unlabV0  = unlabV0_I
 inj0     = inj0_I
 anaA0    = anaA0_I
 
-
-
 --  Primitives that work on Higher Kinded Domains
 
--- con1 :: forall s {f} {t} {z}. R '[s := f] ~<~ z => f t -> V1 z t
--- con1 x = inj1 (labV1 @s x)
+inj1    :: forall {y} {z} {t}. y ~<~ z => V1 y t -> V1 z t
+inj1    = inj1_I
+
+labV1   :: forall s {f} {t}. f t -> V1 (R '[s := f]) t
+labV1   = labV1_I
+
+con1 :: forall s {f} {t} {z}. R '[s := f] ~<~ z => f t -> V1 z t
+con1 x = inj1 (labV1 @s x)
 
 -- case1 :: forall s {f} {t} {u}. (f t -> u) -> V1 (R '[s := f]) t -> u
 -- case1 f = f . unlabV1
@@ -146,7 +150,7 @@ unsafeNth 15 x = y where
   (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, y) = unsafeCoerce x
 unsafeNth 16 x = y where
   (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, y) = unsafeCoerce x
-unsafeNth _ _ = error "exceeded limit"
+unsafeNth _ _ = error "unsafeNth exceeded limit"
 
 
 compose :: (Int, a) -> (Int, b) -> (Int, c)

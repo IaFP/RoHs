@@ -87,32 +87,32 @@ anaA0_I _ = undefined
 
 
 -- Sigh...
-labR1 :: forall s {f} {t}. f t -> R1 (R '[s := f]) t
-labR1 = undefined
+labR1_I :: forall s {f} {t}. f t -> R1 (R '[s := f]) t
+labR1_I = undefined
 
-unlabR1 :: R1 (R '[s := f]) t -> f t
-unlabR1 = undefined
+unlabR1_I :: R1 (R '[s := f]) t -> f t
+unlabR1_I = undefined
 
-prj1 :: z ~<~ y => R1 y t -> R1 z t
-prj1 = undefined
+prj1_I :: z ~<~ y => R1 y t -> R1 z t
+prj1_I = undefined
 
 -- cat1 :: R1 y t -> R1 z t -> R1 (y ~+~ z) t
-cat1 :: Plus y z x => R1 y t -> R1 z t -> R1 x t
-cat1 _ _ = undefined
+cat1_I :: Plus y z x => R1 y t -> R1 z t -> R1 x t
+cat1_I _ _ = undefined
 
-labV1 :: forall s {f} {t}. f t -> V1 (R '[s := f]) t
-labV1 = undefined
+labV1_I :: forall s {f} {t}. f t -> V1 (R '[s := f]) t
+labV1_I = undefined
 
-unlabV1 :: V1 (R '[s := f]) t -> f t
-unlabV1 = undefined
+unlabV1_I :: V1 (R '[s := f]) t -> f t
+unlabV1_I = undefined
 
 
-inj1 :: y ~<~ z => V1 y t -> V1 z t
-inj1 = undefined
+inj1_I :: y ~<~ z => V1 y t -> V1 z t
+inj1_I = undefined
 
 -- brn1 :: (V1 x t -> u) -> (V1 y t -> u) -> V1 (x ~+~ y) t -> u
-brn1 :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
-brn1 = undefined
+brn1_I :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
+brn1_I = undefined
 
 anaA1_I :: forall c {z} {t} {u}.
          All c z =>

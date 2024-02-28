@@ -45,13 +45,14 @@ ana0Core (mgs, oType)
        ; manyIn <- findId mgs "manyIn"
        ; plusE <- findId mgs "plusE"
        ; unsafeNth <- findId mgs "unsafeNth"
-
+       ; us <- getUniquesM
+       ; let mkName u s = mkInternalName u (mkOccName tcName s) noSrcSpan
        ; let ana0Fun = mkCoreLams (tyVars ++ [dId, fId, vId]) body
 
              dn, fn, vn :: Name
-             dn = mkName 0 "$dAll"
-             fn = mkName 1 "f"
-             vn = mkName 2 "vz"
+             dn = mkName (us !! 0)  "$dAll"
+             fn = mkName (us !! 1) "f"
+             vn = mkName (us !! 2) "vz"
 
              dId = mkLocalId dn  manyDataConTy dAllTy
              fId = mkLocalId fn  manyDataConTy fTy
@@ -70,30 +71,30 @@ ana0Core (mgs, oType)
                                           , anyTypeOfKind (idType $ f_tyVars !! 2) ])-- zipTvSubst f_tyVars (fmap mkTyVarTy f_tyVars)
              -- This is ugly, but meh.
              body :: CoreExpr
-             body = (mkCoreApps (Var fId) ([ Type (anyTypeOfKind (idType $ f_tyVars !! 0))
-                                           , Type (anyTypeOfKind (idType $ f_tyVars !! 1))
-                                           , Type (anyTypeOfKind (idType $ f_tyVars !! 2))
-                                           , Cast (mkCoreApps (Var plusE)  [ Type anyType
-                                                                           , (mkCoreApps (Var fstId) [ Type intTy
-                                                                                                     , Type anyType
-                                                                                                     , dAllrep])
-                                                                           , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]])
-                                                 (mkCastCo (substTy subst dAllRepTy) (substTy subst f_plusdTy))
-                                           , Cast (mkCoreApps (Var oneIn)  [ Type anyType
-                                                                           , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]])
-                                                 (substCo subst $ mkCastCo dAllRepTy f_leq1) -- leq1
-                                           , Cast (mkCoreApps (Var manyIn) [ Type anyType
-                                                                           , mkCoreApps (Var fstId) [Type intTy, Type anyType, dAllrep]
-                                                                           , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]
-                                                                           ]) (substCo subst $ mkCastCo dAllRepTy f_leq2) -- leq2
-                                           , Cast (mkCoreApps (Var unsafeNth) [ Type anyType
-                                                                              , Type anyType
-                                                                              , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]
-                                                                              , mkCoreApps (Var sndId) [Type intTy, Type anyType, dAllrep]])
-                                               (substCo subst $ mkCastCo anyType cuTy)
-                                           , Cast (mkCoreTup []) (substCo subst $ mkCastCo (mkTupleTy Boxed []) proxyTy)-- not used so making this up
-                                           , mkCoreApps (Var sndId) [Type intTy, Type anyType, vrep]
-                                           ]))
+             body = (mkCoreApps (Var fId)
+                     [ Type (anyTypeOfKind (idType $ f_tyVars !! 0))
+                     , Type (anyTypeOfKind (idType $ f_tyVars !! 1))
+                     , Type (anyTypeOfKind (idType $ f_tyVars !! 2))
+                     , Cast (mkCoreApps (Var plusE)  [ Type anyType
+                                                     , (mkCoreApps (Var fstId) [ Type intTy
+                                                                               , Type anyType
+                                                                               , dAllrep])
+                                                     , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]])
+                       (mkCastCo (substTy subst dAllRepTy) (substTy subst f_plusdTy))
+                     , Cast (mkCoreApps (Var oneIn)  [ Type anyType
+                                                     , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]])
+                       (substCo subst $ mkCastCo dAllRepTy f_leq1) -- leq1
+                     , Cast (mkCoreApps (Var manyIn) [ Type anyType
+                                                     , mkCoreApps (Var fstId) [Type intTy, Type anyType, dAllrep]
+                                                     , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]
+                                                     ]) (substCo subst $ mkCastCo dAllRepTy f_leq2) -- leq2
+                     , Cast (mkCoreApps (Var unsafeNth) [ Type anyType
+                                                        , Type anyType
+                                                        , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]
+                                                        , mkCoreApps (Var sndId) [Type intTy, Type anyType, dAllrep]])
+                       (substCo subst $ mkCastCo anyType cuTy)
+                     , Cast (mkCoreTup []) (substCo subst $ mkCastCo (mkTupleTy Boxed []) proxyTy)-- not used so making this up
+                     , mkCoreApps (Var sndId) [Type intTy, Type anyType, vrep]])
 
              debug_msg = text "ana0Fun" <+> vcat [ text "Type" <+> ppr oType
                                                  , text "TyBnds"   <+> ppr tyVars
@@ -113,7 +114,7 @@ ana0Core (mgs, oType)
 -- forall c {z} {t} {u}.
 --          All c z =>
 --          (forall s y {f}. (Plus (R '[s := f]) y z, R '[s := f] ~<~ z, y ~<~ z, c f)
---                         => Proxy s -> f u -> t) -- Proxy!? see `fmapV` below
+--                         => Proxy s -> f u -> t)
 --       -> V1 z u -> t
 ana1Core (mgs, oType)
   | (tyVars, ty) <- splitForAllTyVars oType     -- tyVars = [c, z, t]
@@ -126,13 +127,16 @@ ana1Core (mgs, oType)
        ; plusE <- findId mgs "plusE"
        ; unsafeNth <- findId mgs "unsafeNth"
 
+       ; us <- getUniquesM
+       ; let mkName u s = mkInternalName u (mkOccName tcName s) noSrcSpan
+
        ; let ana1Fun = mkCoreLams (tyVars ++ [dId, fId, vId]) body
 
              -- anyType = anyTypeOfKind -- (mkTyVarTy (tyVars !! 0) `mkVisFunTyMany` liftedTypeKind)
              dn, fn, vn :: Name
-             dn = mkName 0 "$dAll"
-             fn = mkName 1 "f"
-             vn = mkName 2 "vz"
+             dn = mkName (us !! 0) "$dAll"
+             fn = mkName (us !! 1) "f"
+             vn = mkName (us !! 2) "vz"
 
              dId = mkLocalId dn  manyDataConTy dAllTy
              fId = mkLocalId fn  manyDataConTy fTy
@@ -146,37 +150,54 @@ ana1Core (mgs, oType)
 
              (f_tyVars, f_plusdTy, f_leq1, f_leq2, cuTy, proxyTy, uTy) = decomp fTy
 
-             subst = zipTvSubst f_tyVars ([ anyTypeOfKind (idType $ f_tyVars !! 0)
-                                          , anyTypeOfKind (idType $ f_tyVars !! 1)
-                                          , anyTypeOfKind (idType $ f_tyVars !! 2) ])
+             subst = zipTvSubst f_tyVars (fmap (anyTypeOfKind . idType) f_tyVars)
+
              -- This is ugly, but meh.
              body :: CoreExpr
-             body = (mkCoreApps (Var fId) ([ Type (anyTypeOfKind (idType $ f_tyVars !! 0))
-                                           , Type (anyTypeOfKind (idType $ f_tyVars !! 1))
-                                           , Type (anyTypeOfKind (idType $ f_tyVars !! 2))
-                                           , Cast (mkCoreApps (Var plusE)  [ Type anyType
-                                                                           , (mkCoreApps (Var fstId) [ Type intTy
-                                                                                                     , Type anyType
-                                                                                                     , dAllrep])
-                                                                           , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]])
-                                                 (mkCastCo (substTy subst dAllRepTy) (substTy subst f_plusdTy))
-                                           , Cast (mkCoreApps (Var oneIn)  [ Type anyType
-                                                                           , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]])
-                                                 (substCo subst $ mkCastCo dAllRepTy f_leq1) -- leq1
-                                           , Cast (mkCoreApps (Var manyIn) [ Type anyType
-                                                                           , mkCoreApps (Var fstId) [Type intTy, Type anyType, dAllrep]
-                                                                           , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]
-                                                                           ]) (substCo subst $ mkCastCo dAllRepTy f_leq2) -- leq2
-                                           , Cast (mkCoreApps (Var unsafeNth) [ Type anyType
-                                                                              , Type anyType
-                                                                              , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]
-                                                                              , mkCoreApps (Var sndId) [Type intTy, Type anyType, dAllrep]])
-                                               (substCo subst $ mkCastCo anyType cuTy)
-                                           , Cast (mkCoreTup []) (substCo subst $ mkCastCo (mkTupleTy Boxed []) proxyTy)-- not used so making this up
-                                           , mkCoreApps (Var sndId) [ Type intTy
-                                                                    , Type (anyTypeOfKind (liftedTypeKind `mkVisFunTyMany` liftedTypeKind))
-                                                                    , vrep ]
-                                           ]))
+             body = mkCoreApps (Var fId) (
+                        [ Type (anyTypeOfKind (idType $ f_tyVars !! 0))
+                        , Type (anyTypeOfKind (idType $ f_tyVars !! 1))
+                        , Type (anyTypeOfKind (idType $ f_tyVars !! 2))
+                        , Cast (mkCoreApps (Var plusE)
+                                [ Type anyType
+                                , (mkCoreApps (Var fstId) [ Type intTy
+                                                          , Type anyType
+                                                          , dAllrep])
+                                , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]])
+                          (mkCastCo (substTy subst dAllRepTy) (substTy subst f_plusdTy))
+                        , Cast (mkCoreApps (Var oneIn)  [ Type anyType
+                                                        , mkCoreApps (Var fstId)
+                                                          [Type intTy
+                                                          , Type anyType, vrep]])
+                          (substCo subst $ mkCastCo dAllRepTy f_leq1) -- leq1
+                        , Cast (mkCoreApps (Var manyIn) [ Type anyType
+                                                        , mkCoreApps (Var fstId) [Type intTy
+                                                                                 , Type anyType, dAllrep]
+                                                        , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]
+                                                        ])
+                          (substCo subst $ mkCastCo dAllRepTy f_leq2) -- leq2
+                        , Cast (mkCoreApps (Var unsafeNth) [ Type anyType
+                                                           , Type anyType
+                                                           , mkCoreApps (Var fstId)
+                                                             [Type intTy, Type anyType, vrep]
+                                                           , mkCoreApps (Var sndId) [Type intTy
+                                                                                    , Type anyType
+                                                                                    , dAllrep]])
+                          (substCo subst $ mkCastCo anyType cuTy)
+                        , Cast (mkCoreTup []) (substCo subst $ mkCastCo (mkTupleTy Boxed []) proxyTy)-- not used so making this up
+                        , mkCoreApps (Var sndId) [ Type intTy
+                                                 , Type (mkAppTy
+                                                         (anyTypeOfKind (mkTyVarTy (tyVars !! 0)
+                                                                         `mkVisFunTyMany` liftedTypeKind))
+                                                          (mkTyVarTy (tyVars !! 4)))
+                                                 , Cast vrep (mkCastCo
+                                                              vRepTy
+                                                              (mkTupleTy Boxed [intTy
+                                                                         , mkAppTy
+                                                                           (anyTypeOfKind (mkTyVarTy (tyVars !! 0)
+                                                                                            `mkVisFunTyMany` liftedTypeKind))
+                                                                           (mkTyVarTy (tyVars !! 4))]))]
+                                           ])
 
              debug_msg = text "ana1Fun" <+> vcat [ text "Type" <+> ppr oType
                                                  , text "TyBnds"   <+> ppr tyVars
