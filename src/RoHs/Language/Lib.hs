@@ -30,6 +30,10 @@ module RoHs.Language.Lib (
   , con1
   , case1
 
+  , inj1
+  , unlabV1
+  , labV1
+  , brn1
   , anaA1
 
 
@@ -103,16 +107,19 @@ case1 f = f . unlabV1
 inj1    :: forall {y} {z} {t}. y ~<~ z => V1 y t -> V1 z t
 labV1   :: forall s {f} {t}. f t -> V1 (R '[s := f]) t
 unlabV1 :: forall {s} {f} {t}. V1 (R '[s := f]) t -> f t
-anaA1 :: forall c {z} {t} {u}.
-         All c z =>
-         (forall s y {f}. (Plus (R '[s := f]) y z, R '[s := f] ~<~ z, y ~<~ z, c f)
-                       => Proxy s -> f u -> t)
-      -> V1 z u -> t
+anaA1   :: forall c {z} {t} {u}.
+           All c z =>
+           (forall s y {f}. (Plus (R '[s := f]) y z, R '[s := f] ~<~ z, y ~<~ z, c f)
+                            => Proxy s -> f u -> t)
+           -> V1 z u -> t
+brn1 :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
 
 inj1    = inj1_I
 labV1   = labV1_I
 unlabV1 = unlabV1_I
 anaA1   = anaA1_I
+brn1    = brn1_I
+
 
 fstC :: forall {a}{b}. (a, b) -> a
 sndC :: forall {a}{b}. (a, b) -> b
