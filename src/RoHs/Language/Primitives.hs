@@ -114,9 +114,9 @@ inj1 = undefined
 brn1 :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
 brn1 = undefined
 
-anaA1 :: forall c {z} {t} {u}.
+anaA1_I :: forall c {z} {t} {u}.
          All c z =>
-         (forall s y {f}. (Plus (R '[s := f]) y z, c f)
+         (forall s y {f}. (Plus (R '[s := f]) y z, R '[s := f] ~<~ z, y ~<~ z, c f)
                         => Proxy s -> f u -> t) -- Proxy!? see `fmapV` below
       -> V1 z u -> t
-anaA1 _ = undefined
+anaA1_I _ = undefined
