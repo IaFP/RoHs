@@ -6,7 +6,7 @@
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-tc-trace -fprint-explicit-kinds -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-tc-trace -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
-{-# OPTIONS -fforce-recomp -fplugin RoHs.Plugin -fplugin-opt debug #-}
+{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin -fplugin-opt debug #-}
 
 module RoHs.Language.Lib (
 
@@ -27,8 +27,8 @@ module RoHs.Language.Lib (
 
 
   -- * Higher Kinded Row Primitives
-  -- , con1
-  -- , case1
+  , con1
+  , case1
 
   , anaA1
 
@@ -89,25 +89,29 @@ unlabV0  = unlabV0_I
 inj0     = inj0_I
 anaA0    = anaA0_I
 
---  Primitives that work on Higher Kinded Domains
+--  Higher Kinded Domains
 
-inj1    :: forall {y} {z} {t}. y ~<~ z => V1 y t -> V1 z t
-inj1    = inj1_I
-
-labV1   :: forall s {f} {t}. f t -> V1 (R '[s := f]) t
-labV1   = labV1_I
-
+-- Things that are definable
 con1 :: forall s {f} {t} {z}. R '[s := f] ~<~ z => f t -> V1 z t
 con1 x = inj1 (labV1 @s x)
+case1 :: forall s {f} {t} {u}. (f t -> u) -> V1 (R '[s := f]) t -> u
+case1 f = f . unlabV1
 
--- case1 :: forall s {f} {t} {u}. (f t -> u) -> V1 (R '[s := f]) t -> u
--- case1 f = f . unlabV1
 
+
+-- Primitives (reimported with a new name from primitives so that plugin can do its magic)
+inj1    :: forall {y} {z} {t}. y ~<~ z => V1 y t -> V1 z t
+labV1   :: forall s {f} {t}. f t -> V1 (R '[s := f]) t
+unlabV1 :: forall {s} {f} {t}. V1 (R '[s := f]) t -> f t
 anaA1 :: forall c {z} {t} {u}.
          All c z =>
          (forall s y {f}. (Plus (R '[s := f]) y z, R '[s := f] ~<~ z, y ~<~ z, c f)
-                        => Proxy s -> f u -> t)
+                       => Proxy s -> f u -> t)
       -> V1 z u -> t
+
+inj1    = inj1_I
+labV1   = labV1_I
+unlabV1 = unlabV1_I
 anaA1   = anaA1_I
 
 fstC :: forall {a}{b}. (a, b) -> a

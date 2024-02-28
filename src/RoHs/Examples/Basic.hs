@@ -122,7 +122,7 @@ eqV v w = anaA0 @Eq g w where
 
 eqV' :: V0 (R '["x" := Int, "y" := Bool]) -> V0 (R '["x" := Int, "y" := Bool]) -> Bool
 eqV' = eqV
-{-
+
 fmapV :: forall a b z. All Functor z => (a -> b) -> V1 z a -> V1 z b
 fmapV f = anaA1 @Functor g where
 
@@ -134,7 +134,7 @@ fmapV f = anaA1 @Functor g where
   g :: forall s y f. (Plus (R '[s := f]) y z, Functor f)
                   => Proxy s -> f a -> V1 z b
   g _ x = con1 @s (fmap f x)
-
+{-
 -- This should be enough to do something dumb.  Let's try....
 data ZeroF k a = C0 k
   deriving Functor
