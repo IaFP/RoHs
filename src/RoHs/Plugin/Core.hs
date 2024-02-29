@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
-module RoHs.Plugin.Core (install) where
+module RoHs.Plugin.Core (plugin) where
 
 import GHC.Plugins
 import GHC.Utils.Monad
@@ -10,6 +10,8 @@ import RoHs.Plugin.CoreUtils
 
 import Data.List as List
 
+plugin :: Plugin
+plugin = defaultPlugin { installCoreToDos = install }
 
 {-
 The plugin portion that gives real meanings to undefined terms.

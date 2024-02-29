@@ -7,7 +7,7 @@
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-tc-trace -fprint-explicit-kinds -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-tc-trace -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin -fplugin-opt debug #-}
-{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin -fplugin RoHs.Plugin.Core #-}
 
 module RoHs.Language.Lib (
 
