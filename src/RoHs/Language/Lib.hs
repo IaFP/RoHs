@@ -6,7 +6,8 @@
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-simpl -ddump-ds-preopt -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-tc-trace -fprint-explicit-kinds -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-tc-trace -dverbose-core2core -fplugin RoHs.Plugin -fplugin-opt debug #-}
-{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin -fplugin-opt debug #-}
+-- {-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin -fplugin-opt debug #-}
+{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
 
 module RoHs.Language.Lib (
 
@@ -185,22 +186,16 @@ compose _ _ = error "compose ran out of patience"
 
 catC :: (Int, a) -> ((Int, c), d) -> ((Int, e), f) -> ((Int, g), h) -- these types are increasingly hilarious
 -- 0 and 1 require 0-ary records, ignored per above
-catC (2, fs) r p = ((2, unsafeCoerce (0::Int, 1::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p)) where
-  get :: (Int, Int) -> ((Int, c), d) -> ((Int, e), f) -> h
-  get (0, n) r _ = field n r
-  get (1, n) _ p = field n p
-  get _      _ _ = error "catC.get ran out of patience"
-catC (3, fs) r p = ((3, unsafeCoerce (0::Int, 1::Int, 2::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p)) where
-  get :: (Int, Int) -> ((Int, c), d) -> ((Int, e), f) -> h
-  get (0, n) r _ = field n r
-  get (1, n) _ p = field n p
-  get _      _ _ = error "catC.get ran out of patience"
-catC (4, fs) r p = ((4::Int, unsafeCoerce (0::Int, 1::Int, 2::Int, 3::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p, get (unsafeNth 3 fs) r p)) where
-  get :: (Int, Int) -> ((Int, c), d) -> ((Int, e), f) -> h
-  get (0, n) r _ = field n r
-  get (1, n) _ p = field n p
-  get _      _ _ = error "catC.get ran out of patience"
+catC (2, fs) r p = ((2, unsafeCoerce (0::Int, 1::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p))
+catC (3, fs) r p = ((3, unsafeCoerce (0::Int, 1::Int, 2::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p))
+catC (4, fs) r p = ((4::Int, unsafeCoerce (0::Int, 1::Int, 2::Int, 3::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p, get (unsafeNth 3 fs) r p))
 catC _ _ _       = error "catC ran out of patience"
+
+
+get :: (Int, Int) -> ((Int, c), d) -> ((Int, e), f) -> h
+get (0, n) r _ = field n r
+get (1, n) _ p = field n p
+get _      _ _ = error "catC.get ran out of patience"
 
 field :: forall {c} {d} {e}. Int -> ((Int, c), d) -> e
 field n ((_, d), r) = unsafeNth (unsafeNth n d) r

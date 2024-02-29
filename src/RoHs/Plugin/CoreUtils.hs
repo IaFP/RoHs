@@ -6,7 +6,6 @@ import GHC.Types.Unique
 import qualified GHC.TcPlugin.API as API
 
 -- | Helper functions for generating Core, as GHCi API may not give us the right abstractions
-
 mkCoercion :: Role -> Type -> Type -> Coercion
 mkCoercion = API.mkPluginUnivCo "RoHs.Plugin.Core"
 
@@ -48,3 +47,9 @@ anyType = anyTypeOfKind liftedTypeKind
 mkCoreBoxedTuple :: [CoreExpr] -> CoreExpr
 mkCoreBoxedTuple cs = mkCoreConApps (tupleDataCon API.Boxed (length cs))
                       (map (Type . exprType) cs ++ cs)
+
+type PrimMap = [(FastString, (RoHsPluginOptions, ModGuts, Type) -> CoreM CoreExpr)]
+data RoHsPluginOptions = RoHsPluginOptions {debugMode :: Bool}
+
+whenDebugM :: Monad m => RoHsPluginOptions -> m () -> m ()
+whenDebugM opts thing_inside = if (debugMode opts) then thing_inside else return ()

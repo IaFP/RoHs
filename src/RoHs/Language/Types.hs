@@ -1,4 +1,4 @@
-{-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications #-}
+{-# LANGUAGE ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
@@ -31,9 +31,6 @@ class (x ~<~ z, y ~<~ z) => Plus (x :: Row t) (y :: Row t) (z :: Row t)
      x z -> y,
      y z -> x
 
--- But if this is going to *actually* work, we're going to need to step in with
--- some defaulting to actually fix `z`s.
-
 
 -- Records ahoy
 type family R0 :: Row Type -> Type where -- how do the terms which inhabit this type look like
@@ -56,5 +53,3 @@ type family Each (f :: (a -> b)) (r :: Row a) :: Row b where
   -- -fundep, but that seems hard to use...
 
 class All (cls :: a -> Constraint) (r :: Row a) where
-
--- type family All (cls :: a -> Constraint) (r :: Row a) :: Constraint where

@@ -9,10 +9,8 @@ import GHC.Plugins
 
 import RoHs.Plugin.CoreUtils
 
-type PrimMap = [(FastString, (ModGuts, Type) -> CoreM CoreExpr)]
-
 labRCore, unlabRCore, prjCore, catCore, labVCore, unlabVCore, injCore, ana1Core, ana0Core, brnCore
-  :: (ModGuts, Type) -> CoreM CoreExpr
+  :: (RoHsPluginOptions, ModGuts, Type) -> CoreM CoreExpr
 
 
 primMap :: PrimMap
@@ -46,7 +44,7 @@ primMap = [ (fsLit "labR0_I" ,   labRCore)    -- :: forall s {t}. t -> R0 (R '[s
 -- :: forall c {z} {t}. All c z
 --      => (forall s y {u}. (Plus (R '[s := u]) y z, R '[s := t] ~<~ z, y ~<~ z, c u) =>  Proxy s -> u -> t)
 --      -> V0 z -> t
-ana0Core (mgs, oType)
+ana0Core (opts, mgs, oType)
   | (tyVars, ty) <- splitForAllTyVars oType     -- tyVars = [c, z, t]
   , (tys, resultTy) <- splitFunTys ty           -- [forall ... , V0 z], t
   , [dAllTy, fTy, vzTy] <- fmap scaledThing tys
@@ -110,7 +108,7 @@ ana0Core (mgs, oType)
                                                  , text "decompTy" <+> (ppr $ decomp fTy)
                                                  , ppr ana0Fun
                                                  ]
-       ; debugTraceMsg debug_msg
+       ; whenDebugM opts $ debugTraceMsg debug_msg
        ; return ana0Fun
 
        }
@@ -126,7 +124,7 @@ decomp fTy | (f_tyVars, f_ty) <- splitForAllTyVars fTy
 
 
 -- :: forall x y z t. Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
-brnCore (mgs, oType)
+brnCore (opts, mgs, oType)
   | (tyVars, ty) <- splitForAllTyVars oType                  -- tyVars = [x, y, z, t]
   , (tys, resultTy) <- splitFunTys ty                        -- ty = t -> V0 (R '[s := t])
   , [dPlusTy, argfTy, arggTy, argvzTy] <- fmap scaledThing tys
@@ -165,14 +163,14 @@ brnCore (mgs, oType)
                                                    , text "argTys"    <+> ppr tys
                                                    , text "resultTy" <+> ppr resultTy
                                                    , ppr brnFun ]
-       ; debugTraceMsg debug_msg
+       ; whenDebugM opts $ debugTraceMsg debug_msg
        ; return brnFun
 
        }
   | otherwise = pprPanic "shouldn't happen brn0Core" (ppr oType)
 
 -- forall s {t}. t -> V0 (R '[s := t])
-labVCore (_, oType)
+labVCore (opts, _, oType)
   | (tyVars, ty) <- splitForAllTyVars oType                  -- tyVars = [s, t]
   , (argTys, resultTy) <- splitFunTys ty                    -- ty = t -> V0 (R '[s := t])
   , [argTy] <- fmap scaledThing argTys
@@ -192,12 +190,12 @@ labVCore (_, oType)
                                                    , text "argTy"    <+> ppr argTy
                                                    , text "resultTy" <+> ppr resultTy
                                                    , ppr labV0Fun ]
-       ; debugTraceMsg debug_msg
+       ; whenDebugM opts $ debugTraceMsg debug_msg
        ; return labV0Fun
        }
   | otherwise = pprPanic "shouldn't happen labVCore" (ppr oType)
 -- unlabV0 :: forall s {t}. V0 (R '[s := t]) -> t
-unlabVCore (mgs, oType)
+unlabVCore (opts, mgs, oType)
   | (tyVars, ty) <- splitForAllTyVars oType                 -- tys [s, t]
   , (_visFun, (_:_:_:argTy:resultTy:_)) <- splitTyConApp ty -- ty = V0 (R '[s := t]) -> t
   = do { sndId <- findId mgs "sndC"
@@ -220,12 +218,12 @@ unlabVCore (mgs, oType)
                                                    , text "argTy"    <+> ppr argTy
                                                    , text "resultTy" <+> ppr resultTy
                                                    , ppr unlabV0Fun ]
-       ; debugTraceMsg debug_msg
+       ; whenDebugM opts $ debugTraceMsg debug_msg
        ; return unlabV0Fun
        }
  | otherwise = pprPanic "shouldn't happen unlabVCore" (ppr oType)
 
-labRCore  (_, oType) -- :: forall s {t}. t -> R0 (R '[s := t])
+labRCore  (opts, _, oType) -- :: forall s {t}. t -> R0 (R '[s := t])
   | (tyVars, ty) <- splitForAllTyVars oType                 -- tys [s, t]
   , (tys, resultTy) <- splitFunTys ty -- ty = t -> R0 (R '[s := t])
   , [argTy] <- fmap scaledThing tys
@@ -249,12 +247,12 @@ labRCore  (_, oType) -- :: forall s {t}. t -> R0 (R '[s := t])
                                                    , text "argTy"    <+> ppr argTy
                                                    , text "resultTy" <+> ppr resultTy
                                                    , ppr lab0Fun ]
-       ; debugTraceMsg debug_msg
+       ; whenDebugM opts $ debugTraceMsg debug_msg
        ; return lab0Fun }
   | otherwise = pprPanic "shouldn't happen labRCore" (ppr oType)
 
 -- unlabRCore ::  Type -> CoreM CoreExpr
-unlabRCore  (mgs, oType)   -- oType = forall s t. R0 (R '[s := t]) -> t
+unlabRCore (opts, mgs, oType)   -- oType = forall s t. R0 (R '[s := t]) -> t
   | (tys, ty) <- splitForAllTyVars oType      -- tys      = [s, t]
   , (_vis, (_:_:_:argTy:resultTy:_)) <- splitTyConApp ty  -- ty = R0 (R '[s := t]) -> t
   = do { unsafeNthId <- findId mgs "unsafeNth"
@@ -288,13 +286,13 @@ unlabRCore  (mgs, oType)   -- oType = forall s t. R0 (R '[s := t]) -> t
                                                      , text "resultTy:" <+> ppr resultTy
                                                      , ppr unlabR0Fun
                                                      ]
-       ; debugTraceMsg debug_msg
+       ; whenDebugM opts $ debugTraceMsg debug_msg
        ; return unlabR0Fun
        }
   | otherwise = pprPanic "shouldn't happen unlabRCore" (ppr oType)
 
 
-prjCore  (mgs, oType) -- forall z y. z ~<~ y => R0 y -> R0 z
+prjCore (opts, mgs, oType) -- forall z y. z ~<~ y => R0 y -> R0 z
   | (tyVars, ty) <- splitForAllTyVars oType      -- tys      = [y, z]
   , (tys, resultTy) <- splitFunTys ty  -- ty       = d => R0 y -> R0 z
   , [dTy, argTy] <- fmap scaledThing tys
@@ -321,15 +319,12 @@ prjCore  (mgs, oType) -- forall z y. z ~<~ y => R0 y -> R0 z
 
              co = mkCastCo rowRepTy resultTy
 
-             body :: CoreExpr
-             -- Need a match here
-             -- match d ry with
-
              arg_row =  Cast (Var ry) (mkCastCo argTy rowRepTy)
 
              fer = mkCoreApps (Var fstId) [Type dRepTy, Type anyType, arg_row]
              ser = mkCoreApps (Var sndId) [Type dRepTy, Type anyType, arg_row]
 
+             body :: CoreExpr
              body = mkCoreTup [ mkCoreApps (Var composeId)
                                 [ Type anyType
                                 , Type anyType
@@ -343,12 +338,12 @@ prjCore  (mgs, oType) -- forall z y. z ~<~ y => R0 y -> R0 z
                                                   , text "argTy:" <+> ppr argTy
                                                   , text "resultTy:" <+> ppr resultTy
                                                   , ppr prjFun ]
-       ; debugTraceMsg debug_msg
+       ; whenDebugM opts $ debugTraceMsg debug_msg
        ; return prjFun }
   | otherwise = pprPanic "shouldn't happen prjCore" (ppr oType)
 
 -- catCore :: Type -> CoreM CoreExpr
-catCore  (mgs, oType)                                    -- :: oType = forall x y z. Plus x y z => R0 x -> R0 y -> R0 z
+catCore (opts, mgs, oType)                                    -- :: oType = forall x y z. Plus x y z => R0 x -> R0 y -> R0 z
   |  (tyVars, ty) <- splitForAllTyVars oType              -- tys = [x, y ,z]
   , (tys, resultTy) <- splitFunTys ty                     -- ty  = Plus x y z => R0 x -> R0 y -> R0 z
   ,  [dplusTy, argxTy, argyTy] <- fmap scaledThing tys    -- ty_body  = [R0 x, R0 y]
@@ -383,20 +378,17 @@ catCore  (mgs, oType)                                    -- :: oType = forall x 
                                                    , text "resultTy" <+> ppr resultTy
                                                    , ppr cat0Fun
                                                    ]
-       ; debugTraceMsg debug_msg
+       ; whenDebugM opts $ debugTraceMsg debug_msg
        ; return cat0Fun
        }
   | otherwise = pprPanic "shouldn't happen catCore" (ppr oType)
 
 -- injections go from smaller rows to bigger rows
-injCore  (mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
+injCore (opts, mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
   | (tys, ty) <- splitForAllTyVars oType                          -- tys      = [y, z]
   , (_invsFun, (_:_:dTy:ty_body:_)) <- splitTyConApp ty             -- ty       = d => V0 z -> V0 y
   , (_visFun, (_:_:_:argTy:resultTy:_)) <- splitTyConApp (ty_body)  -- ty_body  = [V0 y -> V0 z]
-  = do { -- fstCoreId <- findId mgs "fstC"
-       -- ; sndCoreId <- findId mgs "sndC"
-       -- ; unsafeCoerceNthCoreId <- findId mgs "unsafeNth"
-         injId <- findId mgs "inj"
+  = do { injId <- findId mgs "inj"
        ; us <- getUniquesM
        ; let injFun :: CoreExpr
              injFun = mkCoreLams (tys ++ [d,ry]) (Cast body co)
@@ -429,7 +421,7 @@ injCore  (mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
                                                   , text "resultTy:" <+> ppr resultTy
                                                   , ppr injFun ]
 
-       ; debugTraceMsg debug_msg
+       ; whenDebugM opts $ debugTraceMsg debug_msg
        ; return injFun }
   | otherwise = pprPanic "shouldn't happen injCore" (ppr oType)
 
@@ -439,7 +431,7 @@ injCore  (mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
 --          (forall s y {f}. (Plus (R '[s := f]) y z, R '[s := f] ~<~ z, y ~<~ z, c f)
 --                         => Proxy s -> f u -> t)
 --       -> V1 z u -> t
-ana1Core (mgs, oType)
+ana1Core (opts, mgs, oType)
   | (tyVars, ty) <- splitForAllTyVars oType     -- tyVars = [c, z, t]
   , (tys, resultTy) <- splitFunTys ty           -- [forall ... , V0 z], t
   , [dAllTy, fTy, vzTy] <- fmap scaledThing tys
@@ -524,9 +516,9 @@ ana1Core (mgs, oType)
                                                  , text "decompTy" <+> (ppr $ decomp fTy)
                                                  , ppr ana1Fun
                                                  ]
-       ; debugTraceMsg debug_msg
+       ; whenDebugM opts $ debugTraceMsg debug_msg
        ; return ana1Fun
 
        }
 
-  | otherwise = pprPanic "shouldn't happen ana0Core" (ppr oType)
+  | otherwise = pprPanic "shouldn't happen ana1Core" (ppr oType)

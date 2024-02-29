@@ -6,6 +6,7 @@ import GHC.Plugins
 import GHC.Utils.Monad
 
 import RoHs.Plugin.Semantics
+import RoHs.Plugin.CoreUtils
 
 import Data.List as List
 
@@ -21,8 +22,6 @@ to see if any simplifications can be made to the core term structure
 to have efficient (space and time) during the runtime phase.
 
 -}
-
-data RoHsPluginOptions = RoHsPluginOptions {debugMode :: Bool}
 
 -- | The entry point for the core plugin.
 --   shamelessly copied from AsyncRattus.Plugin.hs
@@ -44,24 +43,23 @@ install opts todo = case find findSamePass todo of       -- check that we don't 
 --   Theoritically, the safety-ness criteria comes from the GHC Typechecker and TcPlugin
 --   The implementation correctness is well: ¯\_(ツ)_/¯
 txRoHsSemantics :: RoHsPluginOptions -> ModGuts -> CoreM ModGuts
-txRoHsSemantics _ mgs@ModGuts{..} = do { putMsg (text "Hello from" <+> (ppr $ moduleName mg_module))
-                                       ; mg_binds' <- mapM (tx (mgs, primMap)) mg_binds
-                                       ; return $ mgs{mg_binds = mg_binds'}}
+txRoHsSemantics opts mgs@ModGuts{..} = do { whenDebugM opts $ putMsg (text "Hello from" <+> (ppr $ moduleName mg_module))
+                                          ; mg_binds' <- mapM (tx (opts, mgs, primMap)) mg_binds
+                                          ; return $ mgs{ mg_binds = mg_binds' }}
 
 
 class Transform x where
-  tx :: (ModGuts, PrimMap) -> x -> CoreM x
+  tx :: (RoHsPluginOptions, ModGuts, PrimMap) -> x -> CoreM x
 
 instance Transform CoreBind where
   tx pm (NonRec var expr) = NonRec var <$> tx pm expr
   tx pm (Rec bnds)        = Rec <$> mapSndM (tx pm) bnds
 
 instance Transform CoreExpr where
-  tx (mgs, pm) (Var i) = case List.lookup (getOccFS i) pm of
-                          Nothing -> do { -- putMsg (text "not found" <+> ppr i);
-                                          return $ Var i }
-                          Just e -> do { -- putMsg (text "found" <+> ppr i);
-                                         e (mgs, idType i) }
+  tx (opts, mgs, pm) (Var i) = case List.lookup (getOccFS i) pm of
+                          Nothing -> return $ Var i
+                          Just e -> do { whenDebugM opts $ putMsg (text "found" <+> ppr i)
+                                       ; e (opts, mgs, idType i) }
 
   tx pm (Lam arg body) = Lam arg <$> tx pm body
   tx pm (App e1 e2)    = liftA2 App (tx pm e1) (tx pm e2)

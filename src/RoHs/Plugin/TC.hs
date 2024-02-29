@@ -9,7 +9,6 @@
 {-# HLINT ignore "Use camelCase" #-}
 module RoHs.Plugin.TC (tcPlugin) where
 
-import qualified GHC.Plugins as GHC
 import GHC.Utils.Outputable
 
 -- ghc-tcplugin-api
@@ -39,7 +38,7 @@ import Data.Maybe
 -- The point of this exercise it to show that the GHCs injective type families (implementation, the very least)
 -- not as expressive as it should be
 -- `Plus x y z` also has an associated evidence that says how z is formed using x and y
--- If we use x ~+~ y, then we are potentially losing that information. (but do we really need it)
+-- If we use x ~+~ y, then we are potentially losing that information. (but do we really need it? -- Yes.)
 
 tcPlugin :: API.TcPlugin
 tcPlugin =
@@ -406,7 +405,7 @@ mkReflEvTerm predTy = API.evCast tuple (mkCoercion API.Representational tupleTy 
 
 mkAllEvTerm :: [API.CtEvidence] -> Type -> API.EvTerm
 mkAllEvTerm evs predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
-  (evVars, predTys) = unzip [(evVar, predTy) | API.CtWanted predTy (API.EvVarDest evVar) _ _ <- evs]
+  (evVars, predTys) = unzip [(evVar, pTy) | API.CtWanted pTy (API.EvVarDest evVar) _ _ <- evs]
   evTuple = mkCoreConApps (cTupleDataCon (length evVars)) (map (Type . exprType) (map Var evVars) ++ map Var evVars)
   evTupleTy = mkConstraintTupleTy predTys
   tupleTy = mkTupleTy1 API.Boxed [intTy, intTy]
