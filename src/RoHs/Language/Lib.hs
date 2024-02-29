@@ -1,4 +1,4 @@
-{-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications, PolyKinds #-}
+{-# LANGUAGE ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications, PolyKinds #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
@@ -103,7 +103,6 @@ case1 :: forall s {f} {t} {u}. (f t -> u) -> V1 (R '[s := f]) t -> u
 case1 f = f . unlabV1
 
 
-
 -- Primitives (reimported with a new name from primitives so that plugin can do its magic)
 inj1    :: forall {y} {z} {t}. y ~<~ z => V1 y t -> V1 z t
 labV1   :: forall s {f} {t}. f t -> V1 (R '[s := f]) t
@@ -120,7 +119,6 @@ labV1   = labV1_I
 unlabV1 = unlabV1_I
 anaA1   = anaA1_I
 brn1    = brn1_I
-
 
 fstC :: forall {a}{b}. (a, b) -> a
 sndC :: forall {a}{b}. (a, b) -> b
@@ -191,7 +189,6 @@ catC (3, fs) r p = ((3, unsafeCoerce (0::Int, 1::Int, 2::Int)), unsafeCoerce (ge
 catC (4, fs) r p = ((4::Int, unsafeCoerce (0::Int, 1::Int, 2::Int, 3::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p, get (unsafeNth 3 fs) r p))
 catC _ _ _       = error "catC ran out of patience"
 
-
 get :: (Int, Int) -> ((Int, c), d) -> ((Int, e), f) -> h
 get (0, n) r _ = field n r
 get (1, n) _ p = field n p
@@ -221,11 +218,9 @@ brn :: forall {a} {b} {d} {f} {c}. (Int, a) -> ((Int, b) -> c) -> ((Int, d) -> c
 brn (_, d) f g (k, v) = if n == (0::Int) then f (j, unsafeCoerce v) else g (j, unsafeCoerce v) where
   (n, j) = unsafeNth k d
 
-
 inj :: forall {a} {b}. (Int, a) -> (Int, b) -> (Int, b)
 inj (-1, _) kv    = kv
 inj (_, d) (k, v) = (unsafeNth k d, v)
-
 
 oneIn :: Int -> (Int, a)
 oneIn k = (1, unsafeCoerce (MkSolo k))

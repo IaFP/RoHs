@@ -1,11 +1,11 @@
-{-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications #-}
+{-# LANGUAGE ConstraintKinds, DataKinds, QuantifiedConstraints, TypeApplications #-}
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHsPlugin #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -ddump-ds -ddump-simpl -dverbose-core2core -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-ds -ddump-simpl -dverbose-core2core -fplugin RoHs.Plugin #-}
-{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
 

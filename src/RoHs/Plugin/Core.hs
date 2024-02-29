@@ -14,7 +14,7 @@ plugin :: Plugin
 plugin = defaultPlugin { installCoreToDos = install }
 
 {-
-The plugin portion that gives real meanings to undefined terms.
+The plugin gives real meanings to undefined terms.
 
 It makes a traveral over the generated compiler core and replaces
 each primitive mentioned in the `primMap` with the actual core expression.

@@ -138,22 +138,22 @@ tcPluginSolve defs givens wanteds = do
   pure $ API.TcPluginOk solved ws
 
 main_solver :: PluginDefs -> [API.Ct] -> [API.Ct] -> API.TcPluginM API.Solve ([(API.EvTerm, API.Ct)], [API.Ct])
-main_solver defs _ wanteds = do (s, w, _) <- try_solving defs ([], [], []) wanteds -- we don't use givens as of now.
-                                return (s, w)
+main_solver defs givens wanteds = do (s, w, _) <- try_solving defs ([], [], []) givens wanteds -- we don't use givens as of now.
+                                     return (s, w)
 
 -- | Try solving a given constraint
 --   What should be the strategy look like? Here's what i'm going to try and implement
 --       0. Get all the trivial constraints out of the way by using solve_trivial
 --       1. Do a collective improvement where we use the set of givens and set of wanteds
 --       2. if we have made some progress go to step 0
-try_solving :: PluginDefs -> PluginWork -> [API.Ct] -> API.TcPluginM API.Solve PluginWork
-try_solving defs acc@(solved, unsolveds, equalities) wanteds =
-  do acc'@(solved', _, equalities') <- foldlM (solve_trivial defs) acc wanteds
+try_solving :: PluginDefs -> PluginWork -> [API.Ct] -> [API.Ct] -> API.TcPluginM API.Solve PluginWork
+try_solving defs acc@(solved, unsolveds, equalities) givens wanteds =
+  do acc'@(solved', _, equalities') <- foldlM (solve_trivial defs givens) acc wanteds
      API.tcPluginTrace "--Plugin Solve Improvements--" (vcat [ ppr unsolveds
                                                              , ppr equalities
                                                              ])
      if madeProgress (solved, equalities) (solved', equalities')
-     then foldlM (solve_trivial defs) acc' unsolveds
+     then foldlM (solve_trivial defs givens) acc' unsolveds
      else return acc
 
         -- we only make progress when we either solve more things, or we make more equalities.
@@ -165,20 +165,20 @@ try_solving defs acc@(solved, unsolveds, equalities) wanteds =
   where madeProgress (s, e) (s', e') = length s' > length s || length e' > length e
 
 -- | Solves simple wanteds.
---   By simple I mean the ones that do not give rise to new wanted constraints
+--   By simple I mean the ones that do not give rise to new wanted constraints or are "obvous" :)
 --   They are the base cases of the proof generation, if you will
 --   Solving for things like: 1. Plus (x := t) (y := u) ((x := t) ~+~ (y := u)) etc
 --                            2. x ~<~ x
 --                            3. (x := t) ~<~ [x := t , y := u]
-solve_trivial :: PluginDefs -> PluginWork -> API.Ct -> API.TcPluginM API.Solve PluginWork
-solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
+solve_trivial :: PluginDefs -> [API.Ct] -> PluginWork -> API.Ct -> API.TcPluginM API.Solve PluginWork
+solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowPlusCls
-  , Just x_s@(_r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
-  , Just y_s@(_r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
-  , Just z_s@(_r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
-  -- should we be checking that the _r_tycon's are actually `R`?
+  , Just x_s@(r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
+  , Just y_s@(r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
+  , Just z_s@(r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
+  -- , r_tycon1 == r_tycon2 && r_tycon2 == r_tycon3 && r_tycon3 == rowTyCon -- should we be checking that the _r_tycon's are actually `R`?
   , let xs = sortAssocs $ unfold_list_type_elems assocs_x
   , let ys = sortAssocs $ unfold_list_type_elems assocs_y
   , let zs = sortAssocs $ unfold_list_type_elems assocs_z
@@ -218,7 +218,7 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
        }
   -- Handles the case where x is unknown but y and z is known
   -- technically this is solvable by swapping x and y from the previous case, but i'm afraid
-  -- i'll make the plugin solver go another round which would be generating unnecessary extra
+  -- I'll make the plugin solver go another round and round which would be generating unnecessary extra
   -- constraints.
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, y, x, z])) <- API.splitTyConApp_maybe predTy
@@ -308,8 +308,32 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   , clsCon == API.classTyCon rowLeqCls
   , API.eqType x y -- if x ~<~ x definitely holds
   = do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--" (vcat [ ppr clsCon
-                                                                              , ppr x , ppr y ])
+                                                                             , ppr x , ppr y ])
        ; return $ mergePluginWork acc ([(mkReflEvTerm predTy, ct)], [], []) }
+
+
+  --  Handles the case of [W] R '[ s0 := u ] ~<~ z for ambiguity checks
+  -- The given contains a dictonary  [G] R '[ s1 := u ] ~<~ z
+  -- Now we can emit an equality [W] s0 ~ s1 and solve whe [W]
+  | predTy <- API.ctPred ct
+  , Just (clsCon, ([_, wr_lhs, wz_rhs])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowLeqCls
+  , [given] <- filter (leqPredMatcher $ API.classTyCon rowLeqCls) givens
+  , Just (_, ([_, gr_lhs, gz_rhs])) <- API.splitTyConApp_maybe predTy
+  , API.eqType gz_rhs wz_rhs
+  , Just w_s@(_, [kx, assocs_gs]) <- API.splitTyConApp_maybe wr_lhs
+  , Just g_s@(_, [ky, assocs_ws]) <- API.splitTyConApp_maybe gr_lhs
+  , API.eqType kx ky
+  , let gs = sortAssocs $ unfold_list_type_elems assocs_gs
+  , let ws = sortAssocs $ unfold_list_type_elems assocs_ws
+  , eqs <- makeEqFromAssocs gs ws
+  = do { API.tcPluginTrace "--Plugin solving ~<~ ambiguous type--" (vcat [ ppr clsCon
+                                                                         , ppr given
+                                                                         , ppr gs, ppr ws])
+       ; nws <- mapM (\(lhsVar, rhsVar) ->
+                        API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy lhsVar) (mkTyVarTy rhsVar))
+                  eqs
+       ; return $ mergePluginWork acc ([(mkEvTermFromGiven given, ct)], API.mkNonCanonical <$> nws, []) }
 
   -- Handles the case of [(x := t)] ~<~ [(x := t), (y := u)]
   -- with the case where y0 ~<~ z0 but we have a substitution which makes it true
@@ -371,9 +395,18 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
   -- ANI: I suspect that we shouldn't need this as the super class constraints on the type class Plus
   --      will generate the consequents as wanted constraints?
 
+
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (vcat [ppr ct
                                                                                 , text "acc:" <+> ppr acc ])
                    return $ mergePluginWork acc ([], [ct], [])
+
+-- | matches the given Pred that have the shape of R [ x := u ] ~<~ z
+leqPredMatcher :: API.TyCon -> API.Ct -> Bool
+leqPredMatcher rowLeqTyCon gPred
+  | Just (tcCls, [_, r, z]) <- API.splitTyConApp_maybe (API.ctPred gPred)
+  = tcCls  == rowLeqTyCon
+  | otherwise = False
+
 
 unzipAssocList :: API.TcType -> Maybe ([API.TcType], [API.TcType])
 unzipAssocList t = unzip <$> mapM openAssoc (unfold_list_type_elems t) where
@@ -385,6 +418,13 @@ unzipAssocList t = unzip <$> mapM openAssoc (unfold_list_type_elems t) where
     = return (lhs, rhs)
     | otherwise
     = Nothing
+
+mkEvTermFromGiven :: API.Ct -> API.EvTerm
+mkEvTermFromGiven given
+  | API.isGivenCt given
+  = API.EvExpr . API.ctEvExpr . API.ctEvidence $ given
+  |otherwise = error "mkEvTermFrom Given called non-given"
+
 
 mkLtEvTerm :: [Int] -> Type -> API.EvTerm
 mkLtEvTerm is predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
@@ -427,6 +467,17 @@ unfold_list_type_elems =  go []
               = go (assoc : acc) rest
               | otherwise
               = acc
+
+makeEqFromAssocs :: [API.TcType] -> [API.TcType] -> [(TyVar, TyVar)]
+makeEqFromAssocs gs ws = go [] gs ws
+  where
+    go acc [] [] = acc
+    go acc (g:gs') (w:ws')
+      | Just (_, [_, sg, ug]) <- API.splitTyConApp_maybe g
+      , Just (_, [_, sw, uw]) <- API.splitTyConApp_maybe w
+      , [Just sg_tv, Just sw_tv, Just ug_tv, Just uw_tv] <- fmap getTyVar_maybe [sg, sw, ug, uw]
+      = go ((sg_tv, sw_tv):(ug_tv, uw_tv):acc) gs' ws'
+    go _ _ _ = error "mkEqFromAssocs"
 
 -- Nothing to shutdown.
 tcPluginStop :: PluginDefs -> API.TcPluginM API.Stop ()
@@ -511,12 +562,6 @@ getLabels = catMaybes . fmap getLabel
 
 -- Precondition for each of the operations below is that they should be Assocs
 -- They will not work as expected for non-Assoc types
-
--- | Checks if the first argument is a prefix of the second argument
--- checkMembership :: [Type] -> [Type] -> Bool
--- checkMembership [] _         =  True
--- checkMembership _  []        =  False
--- checkMembership (x:xs) (y:ys)=  (x `eqAssoc` y == EQ) && checkMembership xs ys
 
 -- | Checks if the first argument is a subset of the second argument, with evidence
 checkSubsetEv :: [Type] -> [Type] -> Maybe [Int]
