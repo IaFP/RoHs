@@ -5,7 +5,7 @@
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHsPlugin #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -ddump-ds -ddump-simpl -dverbose-core2core -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-ds -ddump-simpl -dverbose-core2core -fplugin RoHs.Plugin #-}
-{-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
 

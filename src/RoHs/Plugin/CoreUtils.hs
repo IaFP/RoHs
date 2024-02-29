@@ -1,8 +1,6 @@
 module RoHs.Plugin.CoreUtils where
 
 import GHC.Plugins
-import GHC.Types.Unique
-
 import qualified GHC.TcPlugin.API as API
 
 -- | Helper functions for generating Core, as GHCi API may not give us the right abstractions

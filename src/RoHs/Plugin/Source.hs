@@ -34,7 +34,7 @@ addPlusConstraints :: [CommandLineOption] -> TcGblEnv -> HsGroup GhcRn ->  TcM (
 addPlusConstraints _options gblEnv grp =
   do traceRn "~~~ Entering addPlusConstraints ~~~" empty
      commonModule   <- findCommonModule
-     names <- runTcPluginM $ 
+     names <- runTcPluginM $
               N <$> lookupOrig commonModule (mkTcOcc "~+~")
                 <*> lookupOrig commonModule (mkTcOcc "Plus")
                 <*> lookupOrig commonModule (mkDataOcc "R")
@@ -55,9 +55,9 @@ xformSignatures _ sig =
 
 -- | Top level function to transform the declaration body as it may contain type signatures
 xformE :: Names -> HsExpr GhcRn -> TcM (HsExpr GhcRn)
-xformE names (ExprWithTySig ext exp (HsWC wcext (L sigTypeLoc sigType@(HsSig {})))) =
+xformE names (ExprWithTySig ext ex (HsWC wcext (L sigTypeLoc sigType@(HsSig {})))) =
   do body' <- xformT names (sig_body sigType)
-     return (ExprWithTySig ext exp (HsWC wcext (L sigTypeLoc sigType { sig_body = body'})))
+     return (ExprWithTySig ext ex (HsWC wcext (L sigTypeLoc sigType { sig_body = body'})))
 xformE _ e = return e
 
 xformT :: Names -> LHsType GhcRn -> TcM (LHsType GhcRn)
@@ -76,8 +76,8 @@ type CollectM = WriterT (HsContext GhcRn) TcM
 
 -- Identifies types that look like `R '["x" := t, "y" := u, "z" := v, ...]`.
 isRowLiteral :: Names -> LHsType GhcRn -> Bool
-isRowLiteral names t@(L _ (HsAppTy _ (L _ (HsTyVar _ _ (L _ name))) (L _ (HsExplicitListTy _ _ assocs)))) =
-  name == rowTyCon names && all isAssocLiteral assocs where
+isRowLiteral names (L _ (HsAppTy _ (L _ (HsTyVar _ _ (L _ vname))) (L _ (HsExplicitListTy _ _ assocs)))) =
+  vname == rowTyCon names && all isAssocLiteral assocs where
 
   isAssocLiteral (L _ (HsAppTy _ (L _ (HsAppTy _ (L _ (HsTyVar _ _ (L _ name))) (L _(HsTyLit _ (HsStrTy _ _))))) _)) =
     name == assocTyCon names
@@ -102,7 +102,7 @@ collect names = collectL where
   collectT t@(HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L _ (HsTyVar _ NotPromoted (L nameLoc name))) lhs)) rhs)
     | name == plusTyCon names && (not (isRowLiteral names lhs) || not (isRowLiteral names rhs)) =
       do let p = L srcloc (HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L srcloc (HsTyVar EpAnnNotUsed NotPromoted (L nameLoc (plusPredCon names)))) lhs)) rhs)) (L srcloc t)) -- lying about source location here
-         lift (traceRn ("1 At " ++ showSDocUnsafe (ppr srcloc) ++ " found use of ~+~:") (ppr t))      
+         lift (traceRn ("1 At " ++ showSDocUnsafe (ppr srcloc) ++ " found use of ~+~:") (ppr t))
          tell [p]
          return t
     | name == plusTyCon names =
@@ -114,19 +114,19 @@ collect names = collectL where
     HsAppKindTy ext <$> collectL fun <*> collectL arg
   collectT (HsFunTy ext arr dom cod) =
     HsFunTy ext arr <$> collectL dom <*> collectL cod
-  collectT (HsListTy ext elem) =
-    HsListTy ext <$> collectL elem
+  collectT (HsListTy ext e) =
+    HsListTy ext <$> collectL e
   collectT (HsTupleTy ext sort elems) =
     HsTupleTy ext sort <$> mapM collectL elems
   collectT (HsSumTy ext ts) =   -- Btw, what is this?
     HsSumTy ext <$> mapM collectL ts
-  collectT t@(HsOpTy ext NotPromoted lhs@(L srcloc _) (L nameloc name) rhs)
+  collectT t@(HsOpTy _ NotPromoted lhs@(L srcloc _) (L nameloc name) rhs)
     | name == plusTyCon names && (not (isRowLiteral names lhs) || not (isRowLiteral names rhs)) =
       do let p = L srcloc (HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L srcloc (HsTyVar EpAnnNotUsed NotPromoted (L nameloc (plusPredCon names)))) lhs)) rhs)) (L srcloc t)) -- lying about source location here
-         lift (traceRn "2 Emitting constraint" (ppr p))         
+         lift (traceRn "2 Emitting constraint" (ppr p))
          tell [p]
          return t
-    | name == plusTyCon names = 
+    | name == plusTyCon names =
       do lift (traceRn "5 Not emitting `Plus` constraint, as both arguments are literal rows" (ppr t))
          return t
   collectT (HsOpTy ext promoted lhs op rhs) =
@@ -137,13 +137,13 @@ collect names = collectL where
     HsIParamTy ext name <$> collectL ty
   collectT (HsKindSig ext ty k) =
     HsKindSig ext <$> collectL ty <*> collectL k
-  collectT (HsSpliceTy ext _) =
+  collectT (HsSpliceTy {}) =
     undefined -- missing some bits here
   collectT (HsDocTy ext ty doc) =
     HsDocTy ext <$> collectL ty <*> pure doc
   collectT (HsBangTy ext bang ty) =
     HsBangTy ext bang <$> collectL ty
-  collectT (HsRecTy ext fields) =
+  collectT (HsRecTy{}) =
     undefined -- TODO: look up field types
   collectT (HsExplicitListTy ext promoted tys) =
     HsExplicitListTy ext promoted <$> mapM collectL tys
