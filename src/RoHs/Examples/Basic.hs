@@ -164,3 +164,8 @@ desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
 -- desugar = desugar'
 desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
   double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
+
+
+three :: Mu (V1 SmallR)
+three = Wrap (con1 @"Add" (C2 (Wrap (con1 @"Const" (C0 (1:: Int))))
+                           (Wrap (con1 @"Const" (C0 (2::Int))))))
