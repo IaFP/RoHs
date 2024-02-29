@@ -160,4 +160,4 @@ collect names = collectL where
   collectC (L ann preds) = L ann <$> mapM collectL preds
 
   collectL :: LHsType GhcRn -> CollectM (LHsType GhcRn)
-  collectL (L loc t) = L loc <$> collectT t where
+  collectL (L loc t) = L loc <$> collectT t

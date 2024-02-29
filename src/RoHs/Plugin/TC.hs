@@ -9,7 +9,7 @@
 {-# HLINT ignore "Use camelCase" #-}
 module RoHs.Plugin.TC (tcPlugin) where
 
-import GHC.Utils.Outputable
+import GHC.Utils.Outputable hiding ((<>))
 
 -- ghc-tcplugin-api
 import qualified GHC.TcPlugin.API as API
@@ -55,11 +55,6 @@ type PluginWork = ( [(API.EvTerm, API.Ct)]      -- solved things
                   , [API.Ct]                    -- new wanteds
                   , [(API.TcTyVar, API.TcType)] -- discovered equalties which will be applied to the residual unsolveds as improvements
                   )
-
--- Merges the plugin work
-mergePluginWork :: PluginWork -> PluginWork -> PluginWork
-mergePluginWork (g_1s, w_1s, eqs1s) (g_2s, w_2s, eqs2s) = (g_1s ++ g_2s, w_1s ++ w_2s, eqs1s ++ eqs2s)
-
 
 -- Definitions used by the plugin.
 data PluginDefs =
@@ -171,7 +166,7 @@ try_solving defs acc@(solved, unsolveds, equalities) givens wanteds =
 --                            2. x ~<~ x
 --                            3. (x := t) ~<~ [x := t , y := u]
 solve_trivial :: PluginDefs -> [API.Ct] -> PluginWork -> API.Ct -> API.TcPluginM API.Solve PluginWork
-solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
+solve_trivial pdf@PluginDefs{..} givens acc@(_, _, eqs) ct
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowPlusCls
@@ -187,7 +182,7 @@ solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
   = do { API.tcPluginTrace "--Plugin solving Plus construct evidence--"
                               (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr z_s, ppr zs, ppr ps ])
        ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
-       ; return $ mergePluginWork acc ([(mkPlusEvTerm ps predTy, ct)], [], [])
+       ; return $ acc <> ([(mkPlusEvTerm ps predTy, ct)], [], [])
        }
 
   -- handles the case such where we have [W] Plus ([x := t]) (y0) ([x := t, y := u])
@@ -211,7 +206,7 @@ solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
        ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--"
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
        ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
-       ; return $ mergePluginWork acc ([ (mkPlusEvTerm ps predTy, ct) ]
+       ; return $ acc <> ([ (mkPlusEvTerm ps predTy, ct) ]
                                       , [API.mkNonCanonical nw] -- no new wanteds
                                       , [(yTVar, y0)] -- new equalilites
                                       )
@@ -241,7 +236,7 @@ solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
        ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--"
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
        ; nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
-       ; return $ mergePluginWork acc ([ ( mkPlusEvTerm ps predTy, ct) ]
+       ; return $ acc <> ([ ( mkPlusEvTerm ps predTy, ct) ]
                                       , [API.mkNonCanonical nw] -- no new wanteds
                                       , [(yTVar, y0)] -- new equalilites
                                       )
@@ -269,7 +264,7 @@ solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
   --                                                                   , ppr z1, ppr z2 ])
   --       ; nw1 <- API.newWanted (API.ctLoc ct) (GHC.mkPrimEqPred x z1)
   --       ; nw2 <- API.newWanted (API.ctLoc ct) (GHC.mkPrimEqPred y z2)
-  --       ; return $ mergePluginWork acc ([(mkIdFunEvTerm predTy, ct)]
+  --       ; return $ acc <> ([(mkIdFunEvTerm predTy, ct)]
   --                                       , API.mkNonCanonical <$> [ nw1, nw2 ]
   --                                       , [])
   --       }
@@ -298,7 +293,7 @@ solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
         ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--"
              (text "computed" <+> ppr zTVar <+> text "=:=" <+> ppr z0)
 
-        ; return $ mergePluginWork acc ([(mkPlusEvTerm ps predTy, ct)], [API.mkNonCanonical nw], [(zTVar, z0)])
+        ; return $ acc <> ([(mkPlusEvTerm ps predTy, ct)], [API.mkNonCanonical nw], [(zTVar, z0)])
         }
 
 
@@ -309,7 +304,7 @@ solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
   , API.eqType x y -- if x ~<~ x definitely holds
   = do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--" (vcat [ ppr clsCon
                                                                              , ppr x , ppr y ])
-       ; return $ mergePluginWork acc ([(mkReflEvTerm predTy, ct)], [], []) }
+       ; return $ acc <> ([(mkReflEvTerm predTy, ct)], [], []) }
 
 
   --  Handles the case of [W] R '[ s0 := u ] ~<~ z for ambiguity checks
@@ -318,22 +313,22 @@ solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, wr_lhs, wz_rhs])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowLeqCls
-  , [given] <- filter (leqPredMatcher $ API.classTyCon rowLeqCls) givens
+  , [given] <- filter (leqPredMatcher pdf) givens
   , Just (_, ([_, gr_lhs, gz_rhs])) <- API.splitTyConApp_maybe predTy
   , API.eqType gz_rhs wz_rhs
-  , Just w_s@(_, [kx, assocs_gs]) <- API.splitTyConApp_maybe wr_lhs
-  , Just g_s@(_, [ky, assocs_ws]) <- API.splitTyConApp_maybe gr_lhs
+  , Just (_, [kx, assocs_gs]) <- API.splitTyConApp_maybe wr_lhs
+  , Just (_, [ky, assocs_ws]) <- API.splitTyConApp_maybe gr_lhs
   , API.eqType kx ky
   , let gs = sortAssocs $ unfold_list_type_elems assocs_gs
   , let ws = sortAssocs $ unfold_list_type_elems assocs_ws
-  , eqs <- makeEqFromAssocs gs ws
+  , new_eqs <- makeEqFromAssocs gs ws
   = do { API.tcPluginTrace "--Plugin solving ~<~ ambiguous type--" (vcat [ ppr clsCon
                                                                          , ppr given
                                                                          , ppr gs, ppr ws])
        ; nws <- mapM (\(lhsVar, rhsVar) ->
                         API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy lhsVar) (mkTyVarTy rhsVar))
-                  eqs
-       ; return $ mergePluginWork acc ([(mkEvTermFromGiven given, ct)], API.mkNonCanonical <$> nws, []) }
+                  new_eqs
+       ; return $ acc <> ([(mkEvTermFromGiven given, ct)], API.mkNonCanonical <$> nws, []) }
 
   -- Handles the case of [(x := t)] ~<~ [(x := t), (y := u)]
   -- with the case where y0 ~<~ z0 but we have a substitution which makes it true
@@ -351,7 +346,7 @@ solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
   , Just is <- checkSubsetEv xs ys
   =  do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--"
                                (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr is ])
-        ; return $ mergePluginWork acc ([(mkLtEvTerm is predTy, ct)], [], []) }
+        ; return $ acc <> ([(mkLtEvTerm is predTy, ct)], [], []) }
 
 
   -- Handles the case where we have [W] (R [x := t] ~+~ r) ~#  (R [x := t, y := u])
@@ -373,7 +368,7 @@ solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
              y0 = API.mkTyConApp rTyCon [k,  mkPromotedListTy rowAssocKi diff]
        ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--" (text "computed" <+> ppr yTVar <+> text "=:=" <+> ppr y0)
 
-       ; return $ mergePluginWork acc ([(API.evCoercion (mkCoercion API.Nominal y y0), ct)]
+       ; return $ acc <> ([(API.evCoercion (mkCoercion API.Nominal y y0), ct)]
                                        , []
                                        , [(yTVar, y0)])
        }
@@ -388,7 +383,7 @@ solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
   = do { API.tcPluginTrace "1 Found instance of All with class and args" (ppr (cls, ls, ts))
        ; wanteds <- sequence [API.newWanted (API.ctLoc ct) (AppTy cls t) | t <- reverse ts]
        ; API.tcPluginTrace "2 Generating new wanteds" (ppr wanteds)
-       ; return $ mergePluginWork acc ([(mkAllEvTerm wanteds predTy, ct)], map API.mkNonCanonical wanteds, [])
+       ; return $ acc <> ([(mkAllEvTerm wanteds predTy, ct)], map API.mkNonCanonical wanteds, [])
        }
 
   -- missing cases: Plus x y z ||- x ~<~ z, y ~<~ z
@@ -398,13 +393,17 @@ solve_trivial PluginDefs{..} givens acc@(_, _, eqs) ct
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (vcat [ppr ct
                                                                                 , text "acc:" <+> ppr acc ])
-                   return $ mergePluginWork acc ([], [ct], [])
+                   return $ acc <> ([], [ct], [])
 
 -- | matches the given Pred that have the shape of R [ x := u ] ~<~ z
-leqPredMatcher :: API.TyCon -> API.Ct -> Bool
-leqPredMatcher rowLeqTyCon gPred
+leqPredMatcher :: PluginDefs -> API.Ct -> Bool
+leqPredMatcher pdf gPred
   | Just (tcCls, [_, r, z]) <- API.splitTyConApp_maybe (API.ctPred gPred)
-  = tcCls  == rowLeqTyCon
+  , Just (tc, _) <- API.splitTyConApp_maybe r
+  , tc == rTyCon pdf
+  , isTyVarTy z
+  = tcCls  == API.classTyCon (rowLeqCls pdf)
+
   | otherwise = False
 
 
