@@ -52,8 +52,8 @@ tcPlugin =
 
 
 -- | PluginWork is a 2-tuple.
-type PluginWork = ([(API.EvTerm, API.Ct)] -- solved things
-                  , [API.Ct]   -- new wanteds
+type PluginWork = ( [(API.EvTerm, API.Ct)]      -- solved things
+                  , [API.Ct]                    -- new wanteds
                   , [(API.TcTyVar, API.TcType)] -- discovered equalties which will be applied to the residual unsolveds as improvements
                   )
 
@@ -92,7 +92,7 @@ findModule moduleName pkgName_mb = do
   where
     errorSuffix = moduleName ++ " in the " ++ (mkPkgName pkgName_mb) ++ " package."
 
-    mkPkgName Nothing = "urrent"
+    mkPkgName Nothing = "current"
     mkPkgName (Just s) = s
 
 
@@ -190,13 +190,6 @@ solve_trivial PluginDefs{..} acc@(_, _, eqs) ct
        ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
        ; return $ mergePluginWork acc ([(mkPlusEvTerm ps predTy, ct)], [], [])
        }
-      -- _ ->
-      --  do { API.tcPluginTrace "--Plugin solving Plus throw error--"  (vcat [ ppr clsCon
-      --                                                                            , ppr x_s, ppr xs
-      --                                                                            , ppr y_s, ppr ys
-      --                                                                            , ppr z_s, ppr zs ])
-      --       ; return $ mergePluginWork acc ([], [ct], [])} -- no need to actually throw error.
-                           -- it might fail down the tc pipleline anyway witha good error message
 
   -- handles the case such where we have [W] Plus ([x := t]) (y0) ([x := t, y := u])
   -- due to functional dependency we _know_ that y0 is unique we can

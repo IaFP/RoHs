@@ -136,36 +136,62 @@ fmapV f = anaA1 @Functor g where
   g _ x = con1 @s (fmap f x)
 
 -- This should be enough to do something dumb.  Let's try....
-data ZeroF k a = C0 k
+data Z k a = Z k
   deriving Functor
-data OneF a    = C1 a
+data O a    = O a
   deriving Functor
-data TwoF a    = C2 a a
+data T a    = T a a
   deriving Functor
 
-newtype Mu f = Wrap {unwrap :: f (Mu f)}
+newtype Mu f = Mk {unwrap :: f (Mu f)}
 
-type BigR = R '["Const" := ZeroF Int] ~+~  R '["Add" := TwoF] ~+~ R '["Double" := OneF]
-type SmallR = R '["Const" := ZeroF Int] ~+~ R '["Add" := TwoF]
+type BigR = R '["Const" := Z Int] ~+~  R '["Add" := T] ~+~ R '["Double" := O]
+type SmallR = R '["Const" := Z Int] ~+~ R '["Add" := T]
 
 
 desugar' :: forall bigr smallr.
            (-- These are essentially part of the type
-            Plus (R '["Double" := OneF]) smallr bigr,
+            Plus (R '["Double" := O]) smallr bigr,
             All Functor smallr,
-            R '["Add" := TwoF] ~<~ smallr
+            R '["Add" := T] ~<~ smallr
            ) =>
            Mu (V1 bigr) -> Mu (V1 smallr)
-desugar' (Wrap e) = Wrap ((double `brn1` (fmapV desugar' . inj1)) e) where
-  double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar' x) (desugar' x)))
+desugar' (Mk e) = Mk ((double `brn1` (fmapV desugar' . inj1)) e) where
+  double = case1 @"Double" (\(O x) -> con1 @"Add" (T (desugar' x) (desugar' x)))
 
 desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
 -- Here's a very explicit type...
 -- desugar = desugar'
-desugar (Wrap e) = Wrap ((double `brn1` (fmapV desugar . inj1)) e) where
-  double = case1 @"Double" (\(C1 x) -> con1 @"Add" (C2 (desugar x) (desugar x)))
+desugar (Mk e) = Mk ((double `brn1` (fmapV desugar . inj1)) e) where
+  double = case1 @"Double" (\(O x) -> con1 @"Add" (T (desugar x) (desugar x)))
 
 
 three :: Mu (V1 SmallR)
-three = Wrap (con1 @"Add" (C2 (Wrap (con1 @"Const" (C0 (1:: Int))))
-                           (Wrap (con1 @"Const" (C0 (2::Int))))))
+three = Mk (con1 @"Add" (T (Mk (con1 @"Const" (Z (1::Int))))
+                           (Mk (con1 @"Const" (Z (2::Int))))))
+
+
+constCase :: forall {k} {u} {a :: k} {p}. V0 (R '["Const" := Z u a]) -> p -> u
+addCase :: Num u => V0 (R '["Add" := T t]) -> (t -> u) -> u
+dblCase :: forall {k} {u} {t} {a :: k}. Num u
+        => V0 (R '["Double" := Z t a]) -> (t -> u) -> u
+negCase :: Num u => V0 (R '["Negate" := O t]) -> (t -> u) -> u
+
+
+constCase e r = case0 @"Const" (\(Z n) -> n) e
+addCase   e r = case0 @"Add"   (\(T e1 e2) -> r e1 + r e2) e
+dblCase   e r = case0 @"Double" (\(Z e) -> r e + r e) e
+negCase   e r = case0 @"Negate" (\(O e) -> - r e) e
+
+
+-- evals (Mk e) = (constCase `brn1` addCase) e where
+--   constCase = case0 @"Const" (\(Z n) -> n)
+--   addCase   = case0 @"Add"   (\(T e1 e2) -> evals e1 + evals e2)
+
+
+cases :: ((Mu f -> t) -> f (Mu f) -> t) -> Mu f -> t
+cases f (Mk e) = f (cases f) e
+
+
+-- evals' :: Mu (V1 SmallR) -> Int
+-- evals' = cases (constCase `brn1` addCase)
