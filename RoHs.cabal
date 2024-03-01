@@ -70,6 +70,7 @@ library
                       RoHs.Plugin
 
                       RoHs.Examples.Basic
+                      RoHs.Examples.Paper
 
     -- Modules included in this library but not exported.
     other-modules:
