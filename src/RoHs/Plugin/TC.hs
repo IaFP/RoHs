@@ -301,25 +301,25 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
   --  Handles the case of [W] R '[ s0 := u ] ~<~ z for ambiguity checks
   -- The given contains a dictonary  [G] R '[ s1 := u ] ~<~ z
   -- Now we can emit an equality [W] s0 ~ s1 and solve whe [W]
-  | predTy <- API.ctPred ct
-  , Just (clsCon, ([_, wr_lhs, wz_rhs])) <- API.splitTyConApp_maybe predTy
-  , clsCon == API.classTyCon rowLeqCls
-  , [given] <- filter (leqPredMatcher pdf) givens
-  , Just (_, ([_, gr_lhs, gz_rhs])) <- API.splitTyConApp_maybe predTy
-  , API.eqType gz_rhs wz_rhs
-  , Just (_, [kx, assocs_gs]) <- API.splitTyConApp_maybe wr_lhs
-  , Just (_, [ky, assocs_ws]) <- API.splitTyConApp_maybe gr_lhs
-  , API.eqType kx ky
-  , let gs = sortAssocs $ unfold_list_type_elems assocs_gs
-  , let ws = sortAssocs $ unfold_list_type_elems assocs_ws
-  , new_eqs <- makeEqFromAssocs gs ws
-  = do { API.tcPluginTrace "--Plugin solving ~<~ ambiguous type--" (vcat [ ppr clsCon
-                                                                         , ppr given
-                                                                         , ppr gs, ppr ws])
-       ; nws <- mapM (\(lhsVar, rhsVar) ->
-                        API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy lhsVar) (mkTyVarTy rhsVar))
-                  new_eqs
-       ; return $ acc <> ([(mkEvTermFromGiven given, ct)], API.mkNonCanonical <$> nws) }
+  -- | predTy <- API.ctPred ct
+  -- , Just (clsCon, ([_, wr_lhs, wz_rhs])) <- API.splitTyConApp_maybe predTy
+  -- , clsCon == API.classTyCon rowLeqCls
+  -- , [given] <- filter (leqPredMatcher pdf) givens
+  -- , Just (_, ([_, gr_lhs, gz_rhs])) <- API.splitTyConApp_maybe predTy
+  -- , API.eqType gz_rhs wz_rhs
+  -- , Just (_, [kx, assocs_gs]) <- API.splitTyConApp_maybe wr_lhs
+  -- , Just (_, [ky, assocs_ws]) <- API.splitTyConApp_maybe gr_lhs
+  -- , API.eqType kx ky
+  -- , let gs = sortAssocs $ unfold_list_type_elems assocs_gs
+  -- , let ws = sortAssocs $ unfold_list_type_elems assocs_ws
+  -- , new_eqs <- makeEqFromAssocs gs ws
+  -- = do { API.tcPluginTrace "--Plugin solving ~<~ ambiguous type--" (vcat [ ppr clsCon
+  --                                                                        , ppr given
+  --                                                                        , ppr gs, ppr ws])
+  --      ; nws <- mapM (\(lhsVar, rhsVar) ->
+  --                       API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy lhsVar) (mkTyVarTy rhsVar))
+  --                 new_eqs
+  --      ; return $ acc <> ([(mkEvTermFromGiven given, ct)], API.mkNonCanonical <$> nws) }
 
   -- Handles the case of [(x := t)] ~<~ [(x := t), (y := u)]
   -- with the case where y0 ~<~ z0 but we have a substitution which makes it true
