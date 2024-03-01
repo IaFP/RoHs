@@ -337,6 +337,19 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
         ; return $ acc <> ([(mkLtEvTerm is predTy, ct)], []) }
 
 
+  -- Solving for All constraints
+  | predTy <- API.ctPred ct
+  , Just (clsCon, [_, cls, row]) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon allCls
+  , Just (rCon, [_, assocs]) <- API.splitTyConApp_maybe row
+  , rCon == rTyCon
+  , Just (ls, ts) <- unzipAssocList assocs
+  = do { API.tcPluginTrace "1 Found instance of All with class and args" (ppr (cls, ls, ts))
+       ; wanteds <- sequence [API.newWanted (API.ctLoc ct) (AppTy cls t) | t <- reverse ts]
+       ; API.tcPluginTrace "2 Generating new wanteds" (ppr wanteds)
+       ; return $ acc <> ([(mkAllEvTerm wanteds predTy, ct)], map API.mkNonCanonical wanteds)
+       }
+
   -- Handles the case where we have [W] (R [x := t] ~+~ r) ~#  (R [x := t, y := u])
   -- This just emits the equality constraint [W] r ~# R [y := u]
   -- This is very specific becuase i want it to be the last resort and not cause the plugin to loop
@@ -361,23 +374,9 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
                          )
        }
 
-  -- Solving for All constraints
-  | predTy <- API.ctPred ct
-  , Just (clsCon, [_, cls, row]) <- API.splitTyConApp_maybe predTy
-  , clsCon == API.classTyCon allCls
-  , Just (rCon, [_, assocs]) <- API.splitTyConApp_maybe row
-  , rCon == rTyCon
-  , Just (ls, ts) <- unzipAssocList assocs
-  = do { API.tcPluginTrace "1 Found instance of All with class and args" (ppr (cls, ls, ts))
-       ; wanteds <- sequence [API.newWanted (API.ctLoc ct) (AppTy cls t) | t <- reverse ts]
-       ; API.tcPluginTrace "2 Generating new wanteds" (ppr wanteds)
-       ; return $ acc <> ([(mkAllEvTerm wanteds predTy, ct)], map API.mkNonCanonical wanteds)
-       }
-
   -- missing cases: Plus x y z ||- x ~<~ z, y ~<~ z
   -- ANI: I suspect that we shouldn't need this as the super class constraints on the type class Plus
   --      will generate the consequents as wanted constraints?
-
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (vcat [ppr ct
                                                                                 , text "acc:" <+> ppr acc ])

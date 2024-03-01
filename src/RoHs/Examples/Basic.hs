@@ -143,7 +143,7 @@ data O a    = O a
 data T a    = T a a
   deriving Functor
 
-newtype Mu f = Mk {unwrap :: f (Mu f)}
+data Mu f = Mk {unwrap :: f (Mu f)}
 
 type BigR = R '["Const" := Z Int] ~+~  R '["Add" := T] ~+~ R '["Double" := O]
 type SmallR = R '["Const" := Z Int] ~+~ R '["Add" := T]
@@ -184,13 +184,13 @@ dblCase   e r = case0 @"Double" (\(Z e) -> r e + r e) e
 negCase   e r = case0 @"Negate" (\(O e) -> - r e) e
 
 
--- evals (Mk e) = (constCase `brn1` addCase) e where
---   constCase = case0 @"Const" (\(Z n) -> n)
---   addCase   = case0 @"Add"   (\(T e1 e2) -> evals e1 + evals e2)
+evals (Mk e) = (constCase `brn1` addCase) e where
+  constCase = case0 @"Const" (\(Z n) -> n)
+  addCase   = case0 @"Add"   (\(T e1 e2) -> evals e1 + evals e2)
 
 
-cases :: ((Mu f -> t) -> f (Mu f) -> t) -> Mu f -> t
-cases f (Mk e) = f (cases f) e
+-- cases :: ((Mu f -> t) -> f (Mu f) -> t) -> Mu f -> t
+-- cases f (Mk e) = f (cases f) e
 
 
 -- evals' :: Mu (V1 SmallR) -> Int

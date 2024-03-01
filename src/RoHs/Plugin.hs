@@ -26,6 +26,17 @@ import qualified RoHs.Plugin.TC as TP (tcPlugin)
 --        (Done) Internalize the representations of `labX` `unLabX` primitives
 --        (Done) Internal.hs to be ported into manipulating dictonary evidences
 
+--               We are a bit sloppy with R '[ x := u ] vs R [ x := u ]. The user written types are marked as former, while plugin generated
+--                    types are generated as the later. This makes eqType fail when we try to compare both of them.
+--
+--               Store `~<~` evidences inside the `Plus` evidences
+--
+--               Parameteraize the plugin with the theory
+--                    Eg. Theories: 1. Rows with Unique labels  (currently implimented)
+--                                  2. The most recent label in a row overwrites other labels (scoped?)
+--                                  3. Non-commutative rows
+--
+--
 plugin :: GHC.Plugin
 plugin =
   GHC.defaultPlugin
