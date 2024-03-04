@@ -53,3 +53,5 @@ type family Each (f :: (a -> b)) (r :: Row a) :: Row b where
   -- -fundep, but that seems hard to use...
 
 class All (cls :: a -> Constraint) (r :: Row a) where
+
+-- instance (r ~<~ r', All cls r') => All cls r

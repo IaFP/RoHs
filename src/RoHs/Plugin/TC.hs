@@ -176,7 +176,7 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
   , let zs = sortAssocs $ unfold_list_type_elems assocs_z
   , length xs + length ys == length zs
   , Just ps <- checkConcatEv xs ys zs
-  = do { API.tcPluginTrace "--Plugin solving Plus construct evidence--"
+  = do { API.tcPluginTrace "--Plugin solving Plus construct evidence for z--"
                               (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr z_s, ppr zs, ppr ps ])
        ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
        ; return $ acc <> ([(mkPlusEvTerm ps predTy, ct)], [], [])
@@ -231,7 +231,7 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
        ; let
              rowAssocKi = mkTyConApp rowAssocTyCon [k]
              y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
-       ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--"
+       ; API.tcPluginTrace "--Plugin solving Plus construct evidence for x--"
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
        ; nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
        ; return $ acc <> ([ ( mkPlusEvTerm ps predTy, ct) ]
@@ -351,8 +351,8 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
   , Just (rCon, [_, assocs]) <- API.splitTyConApp_maybe row
   , rCon == rTyCon
   , Just (ls, ts) <- unzipAssocList assocs
-  = do { API.tcPluginTrace "1 Found instance of All with class and args" (ppr (cls, ls, ts))
-       ; wanteds <- sequence [API.newWanted (API.ctLoc ct) (AppTy cls t) | t <- reverse ts]
+  = do { API.tcPluginTrace "1 Found instance of All with class and args" (vcat [ppr ct, ppr (cls, ls, ts)])
+       ; wanteds <- sequence [API.newWanted (API.ctLoc ct) (AppTy cls t) | t <- ts]
        ; API.tcPluginTrace "2 Generating new wanteds" (ppr wanteds)
        ; return $ acc <> ([(mkAllEvTerm wanteds predTy, ct)], map API.mkNonCanonical wanteds, [])
        }
@@ -370,7 +370,7 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
   , tcRhs == rTyCon
   , let xs = sortAssocs $ unfold_list_type_elems assocs
   , let ys = sortAssocs $ unfold_list_type_elems rhsAssocs
-  , let diff = setDiff xs ys
+  , let diff = sortAssocs $ setDiff xs ys
   = do { API.tcPluginTrace "--Plugin solving Type Eq rule--" (vcat [ppr _tc , ppr assocs, ppr rhsAssocs, ppr diff])
        ; let rowAssocKi = mkTyConApp rowAssocTyCon [k]
              y0 = API.mkTyConApp rTyCon [k,  mkPromotedListTy rowAssocKi diff]
@@ -382,7 +382,7 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
                          )
        }
 
-  -- We want to reject equalities between V0 x and V0 y
+  -- We want to reject equalities between V0 x and V1 y
   | predTy <- API.ctPred ct
   , isEqPrimPred predTy
   , Just (_tc, [_, _, lhsTy, rhsTy]) <- API.splitTyConApp_maybe predTy
@@ -419,7 +419,7 @@ leqPredMatcher pdf gPred
 
 
 unzipAssocList :: API.TcType -> Maybe ([API.TcType], [API.TcType])
-unzipAssocList t = unzip <$> mapM openAssoc (unfold_list_type_elems t) where
+unzipAssocList t = unzip <$> mapM openAssoc (sortAssocs $ unfold_list_type_elems t) where
 
   openAssoc :: API.TcType -> Maybe (API.TcType, API.TcType)
   openAssoc tup
@@ -454,12 +454,12 @@ mkReflEvTerm predTy = API.evCast tuple (mkCoercion API.Representational tupleTy 
   tuple = mkCoreBoxedTuple [mkCoreInt (-1), mkCoreBoxedTuple []]
 
 mkAllEvTerm :: [API.CtEvidence] -> Type -> API.EvTerm
-mkAllEvTerm evs predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
+mkAllEvTerm evs predTy = API.evCast evAllTuple (mkCoercion API.Representational evAllTupleTy predTy) where
   (evVars, predTys) = unzip [(evVar, pTy) | API.CtWanted pTy (API.EvVarDest evVar) _ _ <- evs]
-  evTuple = mkCoreConApps (cTupleDataCon (length evVars)) (map (Type . exprType) (map Var evVars) ++ map Var evVars)
-  evTupleTy = mkConstraintTupleTy predTys
-  tupleTy = mkTupleTy1 API.Boxed [intTy, intTy]
-  tuple = mkCoreBoxedTuple [mkCoreInt (length evVars), Cast evTuple (mkCoercion API.Representational evTupleTy intTy)]
+  evTuple = mkCoreConApps (cTupleDataCon (length evVars)) $ (map Type predTys) ++ map Var evVars
+  evAllTupleTy = mkTupleTy1 API.Boxed [intTy, anyType]
+  evAllTuple = mkCoreBoxedTuple [ mkCoreInt (length evVars)
+                                , Cast evTuple (mkCoercion API.Representational (mkConstraintTupleTy predTys)anyType)]
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
 mkCoercion = API.mkPluginUnivCo "Proven by RoHs.Plugin.TC"
@@ -514,8 +514,8 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
   | [_, a, b] <- tys
   , Just (_ , [ka, arg_a]) <- API.splitTyConApp_maybe a
   , Just (_ , [kb, arg_b]) <- API.splitTyConApp_maybe b
-  , assocs_a <- unfold_list_type_elems arg_a
-  , assocs_b <- unfold_list_type_elems arg_b
+  , assocs_a <- sortAssocs $ unfold_list_type_elems arg_a
+  , assocs_b <- sortAssocs $ unfold_list_type_elems arg_b
   , API.eqType ka kb
   , let rowAssocKi = mkTyConApp rowAssocTyCon [ka]
   = do { let inter = setIntersect assocs_a assocs_b
@@ -523,18 +523,20 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
              redn = API.mkTyFamAppReduction "RoHs.Tc.Plugin" API.Nominal rowPlusTF tys
                                (API.mkTyConApp rTyCon [ka, mkPromotedListTy rowAssocKi concat_assocs])
        ; if null inter
-         then do {
-                 ; API.tcPluginTrace "--Plugin RowConcatRewrite (~+~)--" (vcat [ text "args_a:" <+> ppr assocs_a
+         then do { API.tcPluginTrace "--Plugin RowConcatRewrite (~+~)--" (vcat [ text "args_a:" <+> ppr assocs_a
                                                                      , text "args_b:" <+> ppr assocs_b
                                                                      , text "args:"   <+> ppr concat_assocs
                                                                      , text "givens:" <+> ppr _givens
                                                                      ])
                  ; return $ API.TcPluginRewriteTo redn []
                  }
-         else throwTypeError redn (mkSameLableError a b inter)
+         else do { API.tcPluginTrace "--Plugin Throw error RowConcatRewrite (~+~)--" (vcat [ text "a:" <+> ppr assocs_a
+                                                                                           , text "b:" <+> ppr assocs_b
+                                                                                           , text "inter" <+> ppr inter])
+                 ; throwTypeError redn (mkSameLableError a b inter) }
        }
   | otherwise
-  = do API.tcPluginTrace "other tyfam" (ppr tys)
+  = do API.tcPluginTrace "--Plugin Other TyFam (~+~)--" (ppr tys)
        pure API.TcPluginNoRewrite
 
 
@@ -579,11 +581,11 @@ setDiff xs ys = setDiff_inner [] xs ys
 
 -- computes the set interction of two rows
 setIntersect :: [Type] -> [Type] -> [Type]
-setIntersect xs ys = if length xs > length ys then set_intersection [] xs ys else set_intersection [] ys xs
+setIntersect xs ys = if length xs < length ys then set_intersection [] xs ys else set_intersection [] ys xs
   where
     set_intersection acc [] _ = acc
     set_intersection acc (x:xs') ys' | any (\y -> EQ == eqAssoc x y) ys' = set_intersection (x:acc) xs' ys'
-                                    | otherwise = set_intersection acc xs' ys
+                                     | otherwise = set_intersection acc xs' ys
 
 -- At this point i'm just sorting on the kind of the type which happens to be a string literal, Sigh ...
 cmpAssoc :: API.TcType -> API.TcType -> Ordering

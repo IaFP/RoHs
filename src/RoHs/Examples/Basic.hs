@@ -3,9 +3,9 @@
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHs.Plugin #-}
-{-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-ds -ddump-simpl -dverbose-core2core -fplugin RoHs.Plugin #-}
--- {-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
 
@@ -189,9 +189,11 @@ evals (Mk e) = (constCase `brn1` addCase) e where
   addCase   = case1 @"Add"   (\(T e1 e2) -> evals e1 + evals e2)
 
 
--- cases :: ((Mu f -> t) -> f (Mu f) -> t) -> Mu f -> t
--- cases f (Mk e) = f (cases f) e
+cases :: ((Mu f -> t) -> f (Mu f) -> t) -> Mu f -> t
+cases f (Mk e) = f (cases f) e
 
 
 -- evals' :: Mu (V1 SmallR) -> Int
--- evals' = cases (constCase `brn1` addCase)
+-- evals' e = cases (constCase `brn1` addCase) e where
+--   constCase = case1 @"Const" (\(Z n) -> n)
+--   addCase   = case1 @"Add"   (\(T e1 e2) -> evals e1 + evals e2)

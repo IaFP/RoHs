@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
-{-# OPTIONS_GHC -ddump-tc-trace -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS_GHC -ddump-tc-trace -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS_GHC -ddump-tc-trace -fprint-explicit-kinds -fplugin RoHs.Plugin #-}
 {-# OPTIONS_GHC -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Paper where
@@ -72,10 +73,8 @@ injR (Mk e) = Mk (inj1 (fmapV injR e))
 -- type SmallR = R ["Const" := Zero Int, "Add" := Two]
 -- type BigR   = R ["Const" := Zero Int, "Double" := One, "Add" := Two]
 
-type family SmallR where
-  SmallR = R ["Add" := Two, "Const" := Zero Int]
-type family BigR where
-  BigR = R ["Add" := Two, "Const" := Zero Int, "Double" := One]
+type SmallR = R ["Add" := Two, "Const" := Zero Int]
+type BigR = R ["Add" := Two, "Const" := Zero Int, "Double" := One]
 
 -- constructors
 
@@ -100,8 +99,8 @@ fourB :: Mu (V1 BigR)
 fourB = mkD (mkC 2)
 
 
--- fourS :: Mu (V1 SmallR)
--- fourS = desugar fourB
+fourS :: Mu (V1 SmallR)
+fourS = desugar fourB
 
 
 -- folds
@@ -137,4 +136,5 @@ evalB   = cases ((evalA `brn1` evalD) `brn1` evalC)
 
 desugar :: (R '["Add" := Two] ~<~ y, All Functor (R '["Double" := One] ~+~ y)) => Mu (V1 (R '["Double" := One] ~+~ y)) -> Mu (V1 y)
 desugar = foldV (desD `brn1` (Mk . inj1)) where
+  -- desD :: V1 (R '["Double" := One]) (Mu (V1 z)) -> Mu (V1 z)
   desD = case1 @"Double" (\(O e) -> mkA e e)
