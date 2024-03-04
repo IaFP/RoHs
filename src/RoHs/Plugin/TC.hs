@@ -15,16 +15,17 @@ import GHC.Utils.Outputable hiding ((<>))
 import qualified GHC.TcPlugin.API as API
 import GHC.TcPlugin.API (TcPluginErrorMessage(..))
 import qualified GHC.TcPluginM.Extra as API hiding (newWanted)
-import GHC.Core.TyCo.Rep
 
-import GHC.Core
-import GHC.Core.Make
-import GHC.Core.Type
-import GHC.Core.Predicate
-import GHC.Core.Utils (exprType)
 
 import GHC.Builtin.Types
 
+import GHC.Core
+import GHC.Core.Make
+import GHC.Core.Predicate
+import GHC.Core.Type
+import GHC.Core.TyCo.Rep
+import GHC.Core.TyCon
+import GHC.Core.Utils (exprType)
 
 import RoHs.Plugin.CoreUtils hiding (mkCoercion)
 import qualified GHC.Tc.Types.Constraint as API
@@ -53,6 +54,7 @@ tcPlugin =
 -- | PluginWork is a 2-tuple.
 type PluginWork = ( [(API.EvTerm, API.Ct)]      -- solved things
                   , [API.Ct]                    -- new wanteds
+                  , [API.Ct]                    -- Insoluble constraints which should throw an type error
                   )
 
 -- Definitions used by the plugin.
@@ -124,16 +126,19 @@ tcPluginSolve _ _ [] = do -- simplify given constraints, we don't have to worry 
   pure $ API.TcPluginOk [] []
 tcPluginSolve defs givens wanteds = do
   API.tcPluginTrace "--Plugin Solve Wanteds Start--" (ppr givens $$ ppr wanteds)
-  (solved, ws) <- main_solver defs givens wanteds
+  (solved, ws, insolubles) <- main_solver defs givens wanteds
   API.tcPluginTrace "--Plugin Solve Wanteds Done--" (vcat [ ppr wanteds
                                                           , text "---------------"
                                                           , ppr solved
+                                                          , text "---------------"
+                                                          , ppr insolubles
                                                           ])
-  pure $ API.TcPluginOk solved ws
+  if not (null insolubles)
+  then return $ API.TcPluginContradiction insolubles
+  else return $ API.TcPluginOk solved ws
 
-main_solver :: PluginDefs -> [API.Ct] -> [API.Ct] -> API.TcPluginM API.Solve ([(API.EvTerm, API.Ct)], [API.Ct])
-main_solver defs givens wanteds = do (s, w) <- try_solving defs ([], []) givens wanteds -- we don't use givens as of now.
-                                     return (s, w)
+main_solver :: PluginDefs -> [API.Ct] -> [API.Ct] -> API.TcPluginM API.Solve PluginWork
+main_solver defs givens wanteds = try_solving defs ([], [], []) givens wanteds -- we don't use givens as of now.
 
 -- | Try solving a given constraint
 --   What should be the strategy look like? Here's what i'm going to try and implement
@@ -141,12 +146,12 @@ main_solver defs givens wanteds = do (s, w) <- try_solving defs ([], []) givens 
 --       1. Do a collective improvement where we use the set of givens and set of wanteds
 --       2. if we have made some progress go to step 0
 try_solving :: PluginDefs -> PluginWork -> [API.Ct] -> [API.Ct] -> API.TcPluginM API.Solve PluginWork
-try_solving defs acc@(solved, unsolveds) givens wanteds =
-  do acc'@(solved', _) <- foldlM (solve_trivial defs givens) acc wanteds
-     API.tcPluginTrace "--Plugin Solve Improvements--" (vcat [ ppr unsolveds ])
+try_solving defs acc@(solved, unsolveds, _) givens wanteds =
+  do acc'@(solved', _, insol') <- foldlM (solve_trivial defs givens) acc wanteds
+     API.tcPluginTrace "--Plugin Solve Improvements--" (vcat [ ppr unsolveds, ppr insol' ])
      if madeProgress solved solved'
      then foldlM (solve_trivial defs givens) acc' unsolveds
-     else return acc
+     else return $ acc <> ([], [], insol')
 
         -- we only make progress when we either solve more things
   where madeProgress s s' = length s' > length s
@@ -174,7 +179,7 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
   = do { API.tcPluginTrace "--Plugin solving Plus construct evidence--"
                               (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr z_s, ppr zs, ppr ps ])
        ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
-       ; return $ acc <> ([(mkPlusEvTerm ps predTy, ct)], [])
+       ; return $ acc <> ([(mkPlusEvTerm ps predTy, ct)], [], [])
        }
 
   -- handles the case such where we have [W] Plus ([x := t]) (y0) ([x := t, y := u])
@@ -201,6 +206,7 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
        ; new_eq_wanted <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
        ; return $ acc <> ([(mkPlusEvTerm ps predTy, ct)]
                          , API.mkNonCanonical <$> [nw, new_eq_wanted] -- no new wanteds
+                         , []
                          )
        }
   -- Handles the case where x is unknown but y and z is known
@@ -230,6 +236,7 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
        ; nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
        ; return $ acc <> ([ ( mkPlusEvTerm ps predTy, ct) ]
                          , [API.mkNonCanonical nw] -- no new wanteds
+                         , []
                          )
        }
   -- Handles the case where z is of the form x0 ~+~ y0 in [W] Plus x y (x0 ~+~ y0)
@@ -284,7 +291,7 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
         ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--"
              (text "computed" <+> ppr zTVar <+> text "=:=" <+> ppr z0)
 
-        ; return $ acc <> ([(mkPlusEvTerm ps predTy, ct)], [API.mkNonCanonical nw])
+        ; return $ acc <> ([(mkPlusEvTerm ps predTy, ct)], [API.mkNonCanonical nw], [])
         }
 
 
@@ -295,7 +302,7 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
   , API.eqType x y -- if x ~<~ x definitely holds
   = do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--" (vcat [ ppr clsCon
                                                                              , ppr x , ppr y ])
-       ; return $ acc <> ([(mkReflEvTerm predTy, ct)], []) }
+       ; return $ acc <> ([(mkReflEvTerm predTy, ct)], [], []) }
 
 
   --  Handles the case of [W] R '[ s0 := u ] ~<~ z for ambiguity checks
@@ -334,7 +341,7 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
   , Just is <- checkSubsetEv xs ys
   =  do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--"
                                (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr is ])
-        ; return $ acc <> ([(mkLtEvTerm is predTy, ct)], []) }
+        ; return $ acc <> ([(mkLtEvTerm is predTy, ct)], [], []) }
 
 
   -- Solving for All constraints
@@ -347,7 +354,7 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
   = do { API.tcPluginTrace "1 Found instance of All with class and args" (ppr (cls, ls, ts))
        ; wanteds <- sequence [API.newWanted (API.ctLoc ct) (AppTy cls t) | t <- reverse ts]
        ; API.tcPluginTrace "2 Generating new wanteds" (ppr wanteds)
-       ; return $ acc <> ([(mkAllEvTerm wanteds predTy, ct)], map API.mkNonCanonical wanteds)
+       ; return $ acc <> ([(mkAllEvTerm wanteds predTy, ct)], map API.mkNonCanonical wanteds, [])
        }
 
   -- Handles the case where we have [W] (R [x := t] ~+~ r) ~#  (R [x := t, y := u])
@@ -371,16 +378,34 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
        ; nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
        ; return $ acc <> ([(API.evCoercion (mkCoercion API.Nominal y y0), ct)]
                          , [API.mkNonCanonical nw]
+                         , []
                          )
+       }
+
+  -- We want to reject equalities between V0 x and V0 y
+  | predTy <- API.ctPred ct
+  , isEqPrimPred predTy
+  , Just (_tc, [_, _, lhsTy, rhsTy]) <- API.splitTyConApp_maybe predTy
+  , Just (lhsTc, _) <- API.splitTyConApp_maybe lhsTy
+  , Just (rhsTc, _) <- API.splitTyConApp_maybe rhsTy
+  , lhsTc /= rhsTc
+  , isFamilyTyCon lhsTc
+  , isFamilyTyCon rhsTc
+  = do { do API.tcPluginTrace "--Plugin obviously not equal--" (ppr ct)
+       ; error_predTy <- API.mkTcPluginErrorTy (mkTyFamNotEqError lhsTy rhsTy)
+       ; nw_error <- API.newWanted (API.ctLoc ct) error_predTy
+       ; return $ acc <> ([], [], [API.mkNonCanonical nw_error])
        }
 
   -- missing cases: Plus x y z ||- x ~<~ z, y ~<~ z
   -- ANI: I suspect that we shouldn't need this as the super class constraints on the type class Plus
   --      will generate the consequents as wanted constraints?
+  --      store x ~<~ z and y ~<~ z in the Plus x y z dictonary
 
-  | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (vcat [ppr ct
-                                                                                , text "acc:" <+> ppr acc ])
-                   return $ acc <> ([], [ct])
+
+
+  | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
+                   return $ acc <> ([], [ct], [])
 
 -- | matches the given Pred that have the shape of R [ x := u ] ~<~ z
 leqPredMatcher :: PluginDefs -> API.Ct -> Bool
@@ -480,25 +505,6 @@ tcPluginRewrite defs@(PluginDefs {..}) = API.listToUFM [ (rowPlusTF, rewrite_row
 -- intercept_tyfam :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
 -- intercept_tyfam (PluginDefs { .. }) givens tys
 --   = do API.tcPluginTrace "--Plugin Eq TF--" (vcat [ ppr givens $$ ppr tys ])
---        pure API.TcPluginNoRewrite
-
-
--- | Constraints like All Functor (R [x := t]) should reduce to () as they are trivially satisfiable
--- rewrite_allTF :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
--- rewrite_allTF (PluginDefs { .. }) _givens tys
---   | [_, clsTyCon, r] <- tys
---   , API.eqType clsTyCon (mkNakedTyConTy $ API.classTyCon functorCls)
---   , Just (rtc_mb, _) <- API.splitTyConApp_maybe r
---   , rtc_mb == rTyCon
---   -- TODO: and possibly check if the assocs are well formed?
---   = do API.tcPluginTrace "--Plugin All TF unit constraint--" (vcat [ ppr allTF, ppr tys, ppr _givens ])
---        -- return a unit constraint?
---        pure $ API.TcPluginRewriteTo
---                            (API.mkTyFamAppReduction "RoHsPlugin" API.Nominal allTF tys
---                                (mkConstraintTupleTy []))
---                            []
---   | otherwise
---   = do API.tcPluginTrace "--Plugin All TF--" (vcat [ ppr allTF, ppr tys, ppr _givens ])
 --        pure API.TcPluginNoRewrite
 
 -- | Reduce (x := t) ~+~ (y := u) to [x := t, y := u]
@@ -621,3 +627,14 @@ mkSameLableError r1 r2 common = Txt "Cannot concat rows"
                          :-: (PrintType r2)
                          :-: Txt "Contains Common Labels"
                          :-: foldl (\ acc lbl -> acc :|: (Txt " ") :|: (PrintType lbl)) (Txt "") (getLabels common)
+
+mkTyFamNotEqError :: Type -> Type -> TcPluginErrorMessage
+mkTyFamNotEqError ty1 ty2
+  | Just (tc1, _) <- splitTyConApp_maybe ty1
+  , Just (tc2, _) <- splitTyConApp_maybe ty2
+  , tc1 /= tc2
+  = Txt "Cannot Unify"
+  :-: (PrintType ty1)
+  :-: (Txt " with ")
+  :-: (PrintType ty2)
+  | otherwise = API.pprPanic "mkTyFamNotEqError shouldn't happen" (ppr ty1 $$ ppr ty2)

@@ -1,4 +1,5 @@
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DataKinds, TypeFamilies #-}
+{-# OPTIONS_GHC -ddump-tc-trace -fplugin RoHs.Plugin #-}
 {-# OPTIONS_GHC -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Paper where
@@ -71,8 +72,10 @@ injR (Mk e) = Mk (inj1 (fmapV injR e))
 -- type SmallR = R ["Const" := Zero Int, "Add" := Two]
 -- type BigR   = R ["Const" := Zero Int, "Double" := One, "Add" := Two]
 
-type SmallR = R ["Add" := Two, "Const" := Zero Int]
-type BigR   = R ["Add" := Two, "Const" := Zero Int, "Double" := One]
+type family SmallR where
+  SmallR = R ["Add" := Two, "Const" := Zero Int]
+type family BigR where
+  BigR = R ["Add" := Two, "Const" := Zero Int, "Double" := One]
 
 -- constructors
 
@@ -95,6 +98,11 @@ threeB = mkA (mkC 1) (mkC 2)
 
 fourB :: Mu (V1 BigR)
 fourB = mkD (mkC 2)
+
+
+-- fourS :: Mu (V1 SmallR)
+-- fourS = desugar fourB
+
 
 -- folds
 
