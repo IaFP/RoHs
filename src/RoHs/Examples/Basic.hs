@@ -5,7 +5,7 @@
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-ds -ddump-simpl -dverbose-core2core -fplugin RoHs.Plugin #-}
-{-# OPTIONS -fforce-recomp -dcore-lint -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
 
@@ -15,7 +15,8 @@ import Data.Proxy
 
 default (Int)
 
-singleton_foo_Int :: R0 (R '["x" := Int]); singleton_foo_Int = labR0 @"x" 1
+singleton_foo_Int :: R0 (R '["x" := Int])
+singleton_foo_Int = labR0 @"x" 1
 
 singleton_foo_Bool :: R0 (R '["y" := Bool])
 singleton_foo_Bool  = labR0 @"y" True

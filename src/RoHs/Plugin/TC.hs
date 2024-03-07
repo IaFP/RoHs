@@ -62,7 +62,7 @@ data PluginDefs =
   PluginDefs
     { rowPlusTF        :: !API.TyCon -- standin for ~+~
     , rowTyCon         :: !API.TyCon -- standin for Row
-    , rTyCon           :: !API.TyCon -- standin for R
+    , rTF              :: !API.TyCon -- standin for R
     , rowAssoc         :: !API.TyCon -- standin for :=
     , rowAssocTyCon    :: !API.TyCon -- standin for Assoc
 
@@ -101,8 +101,8 @@ tcPluginInit = do
   typesModule    <- findTypesModule
 
   rowPlusTF      <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "~+~")
+  rTF            <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "R")
   rowTyCon       <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "Row")
-  rTyCon         <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig typesModule (API.mkDataOcc "R")
   rowAssoc       <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig typesModule (API.mkDataOcc ":=")
   rowAssocTyCon  <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "Assoc")
   rowLeqCls      <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "~<~")
@@ -111,7 +111,7 @@ tcPluginInit = do
 
   pure (PluginDefs { rowPlusTF     = rowPlusTF
                    , rowTyCon      = rowTyCon
-                   , rTyCon        = rTyCon
+                   , rTF           = rTF
                    , rowAssoc      = rowAssoc
                    , rowAssocTyCon = rowAssocTyCon
 
@@ -349,7 +349,7 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
   , Just (clsCon, [_, cls, row]) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon allCls
   , Just (rCon, [_, assocs]) <- API.splitTyConApp_maybe row
-  , rCon == rTyCon
+  , rCon == rTF
   , Just (ls, ts) <- unzipAssocList assocs
   = do { API.tcPluginTrace "1 Found instance of All with class and args" (vcat [ppr ct, ppr (cls, ls, ts)])
        ; wanteds <- sequence [API.newWanted (API.ctLoc ct) (AppTy cls t) | t <- ts]
@@ -367,13 +367,13 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
   , Just yTVar <- getTyVar_maybe y -- y is a type variable
   , Just (_ , [k , assocs]) <- API.splitTyConApp_maybe r
   , Just (tcRhs , [_ , rhsAssocs]) <- API.splitTyConApp_maybe rhsTy
-  , tcRhs == rTyCon
+  , tcRhs == rTF
   , let xs = sortAssocs $ unfold_list_type_elems assocs
   , let ys = sortAssocs $ unfold_list_type_elems rhsAssocs
   , let diff = sortAssocs $ setDiff xs ys
   = do { API.tcPluginTrace "--Plugin solving Type Eq rule--" (vcat [ppr _tc , ppr assocs, ppr rhsAssocs, ppr diff])
        ; let rowAssocKi = mkTyConApp rowAssocTyCon [k]
-             y0 = API.mkTyConApp rTyCon [k,  mkPromotedListTy rowAssocKi diff]
+             y0 = API.mkTyConApp rTF [k,  mkPromotedListTy rowAssocKi diff]
        ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--" (text "computed" <+> ppr yTVar <+> text "=:=" <+> ppr y0)
        ; nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
        ; return $ acc <> ([(API.evCoercion (mkCoercion API.Nominal y y0), ct)]
@@ -381,6 +381,30 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
                          , []
                          )
        }
+
+  -- Handles the case where we have [W] (R [x1 := t]) ~#  (R [x2 := t])
+  -- This just emits the equality constraint [W] x1 ~# x2
+  | predTy <- API.ctPred ct
+  , isEqPrimPred predTy
+  , Just (_, [_, _, lhsTy, rhsTy]) <- API.splitTyConApp_maybe predTy
+  , Just (_tcL, [kl, las]) <- API.splitTyConApp_maybe lhsTy
+  , Just (_tcR, [kr, ras]) <- API.splitTyConApp_maybe rhsTy
+  , _tcL == rTF
+  , _tcR == rTF
+  , let rs = sortAssocs $ unfold_list_type_elems ras
+  , let ls = sortAssocs $ unfold_list_type_elems las
+  , API.eqType kr kl
+  , length rs == length ls
+  , eqs <- makeEqFromAssocs rs ls
+  = do { API.tcPluginTrace "--Plugin Eq RTF--" (vcat [ppr _tcL , ppr rs, ppr _tcR, ppr ls])
+       ; nws <- mapM (\(lhsTy, rhsTy) ->
+                        API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal lhsTy rhsTy)
+                  eqs
+       ; u <- API.newUnique
+       ; return $ acc <> ([(mkIdEvTerm u predTy, ct)], API.mkNonCanonical <$> nws, [])
+       }
+
+
 
   -- We want to reject equalities between V0 x and V1 y
   | predTy <- API.ctPred ct
@@ -412,7 +436,7 @@ leqPredMatcher :: PluginDefs -> API.Ct -> Bool
 leqPredMatcher pdf gPred
   | Just (tcCls, [_, r, z]) <- API.splitTyConApp_maybe (API.ctPred gPred)
   , Just (tc, _) <- API.splitTyConApp_maybe r
-  , tc == rTyCon pdf
+  , tc == rTF pdf
   , isTyVarTy z
   = tcCls  == API.classTyCon (rowLeqCls pdf)
   | otherwise = False
@@ -461,6 +485,17 @@ mkAllEvTerm evs predTy = API.evCast evAllTuple (mkCoercion API.Representational 
   evAllTuple = mkCoreBoxedTuple [ mkCoreInt (length evVars)
                                 , Cast evTuple (mkCoercion API.Representational (mkConstraintTupleTy predTys)anyType)]
 
+
+mkIdEvTerm :: API.Unique -> Type -> API.EvTerm
+mkIdEvTerm u ty
+ | Just (_, [_, _, lhsTy, _]) <- API.splitTyConApp_maybe ty
+ , let aId = API.mkLocalId an manyDataConTy lhsTy
+       an = mkName u "_a"
+       idTy = API.mkVisFunTysMany [lhsTy] lhsTy
+ = API.evCast (mkCoreLams [aId] (Var aId))
+              (mkCoercion API.Representational idTy ty)
+mkIdEvTerm u ty  = API.pprPanic "mkIdEvTerm" (ppr u $$ ppr ty)
+
 mkCoercion :: API.Role -> Type -> Type -> Coercion
 mkCoercion = API.mkPluginUnivCo "Proven by RoHs.Plugin.TC"
 
@@ -478,16 +513,15 @@ unfold_list_type_elems =  go []
               | otherwise
               = acc
 
-makeEqFromAssocs :: [API.TcType] -> [API.TcType] -> [(TyVar, TyVar)]
+makeEqFromAssocs :: [API.TcType] -> [API.TcType] -> [(API.TcType, API.TcType)]
 makeEqFromAssocs gs ws = go [] gs ws
   where
     go acc [] [] = acc
     go acc (g:gs') (w:ws')
       | Just (_, [_, sg, ug]) <- API.splitTyConApp_maybe g
       , Just (_, [_, sw, uw]) <- API.splitTyConApp_maybe w
-      , [Just sg_tv, Just sw_tv, Just ug_tv, Just uw_tv] <- fmap getTyVar_maybe [sg, sw, ug, uw]
-      = go ((sg_tv, sw_tv):(ug_tv, uw_tv):acc) gs' ws'
-    go _ _ _ = error "mkEqFromAssocs"
+      = go ((sg, sw):(ug, uw):acc) gs' ws'
+    go _ ls rs = API.pprPanic "mkEqFromAssocs" (ppr ls $$ ppr rs)
 
 -- Nothing to shutdown.
 tcPluginStop :: PluginDefs -> API.TcPluginM API.Stop ()
@@ -498,14 +532,14 @@ tcPluginStop _ = do
 -- We have to possibly rewrite ~+~ type family applications
 tcPluginRewrite :: PluginDefs -> API.UniqFM API.TyCon API.TcPluginRewriter
 tcPluginRewrite defs@(PluginDefs {..}) = API.listToUFM [ (rowPlusTF, rewrite_rowplus defs)
-                                                       -- , (allTF, rewrite_allTF defs)
+                                                       , (rTF, intercept_tyfam defs)
                                                        ]
 
 -- | Template interceptor for a type family tycon
--- intercept_tyfam :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
--- intercept_tyfam (PluginDefs { .. }) givens tys
---   = do API.tcPluginTrace "--Plugin Eq TF--" (vcat [ ppr givens $$ ppr tys ])
---        pure API.TcPluginNoRewrite
+intercept_tyfam :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
+intercept_tyfam (PluginDefs { .. }) givens tys
+  = do API.tcPluginTrace "--Plugin R TF--" (vcat [ ppr givens $$ ppr tys ])
+       pure API.TcPluginNoRewrite
 
 -- | Reduce (x := t) ~+~ (y := u) to [x := t, y := u]
 --   Post condition: The label occurance in the list is lexicographic.
@@ -521,7 +555,7 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
   = do { let inter = setIntersect assocs_a assocs_b
              concat_assocs = sortAssocs $ assocs_a ++ assocs_b
              redn = API.mkTyFamAppReduction "RoHs.Tc.Plugin" API.Nominal rowPlusTF tys
-                               (API.mkTyConApp rTyCon [ka, mkPromotedListTy rowAssocKi concat_assocs])
+                               (API.mkTyConApp rTF [ka, mkPromotedListTy rowAssocKi concat_assocs])
        ; if null inter
          then do { API.tcPluginTrace "--Plugin RowConcatRewrite (~+~)--" (vcat [ text "args_a:" <+> ppr assocs_a
                                                                      , text "args_b:" <+> ppr assocs_b
@@ -536,7 +570,7 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
                  ; throwTypeError redn (mkSameLableError a b inter) }
        }
   | otherwise
-  = do API.tcPluginTrace "--Plugin Other TyFam (~+~)--" (ppr tys)
+  = do API.tcPluginTrace "--Plugin Cannot Reduce TyFam (~+~)--" (ppr tys)
        pure API.TcPluginNoRewrite
 
 

@@ -70,11 +70,11 @@ injR (Mk e) = Mk (inj1 (fmapV injR e))
 -- We seem to need type synonyms to be declared in sorted order... need to track
 -- down why.
 --
--- type SmallR = R ["Const" := Zero Int, "Add" := Two]
--- type BigR   = R ["Const" := Zero Int, "Double" := One, "Add" := Two]
+type SmallR = R ["Const" := Zero Int, "Add" := Two]
+type BigR   = R ["Const" := Zero Int, "Double" := One, "Add" := Two]
 
-type SmallR = R ["Add" := Two, "Const" := Zero Int]
-type BigR = R ["Add" := Two, "Const" := Zero Int, "Double" := One]
+-- type SmallR = R ["Add" := Two, "Const" := Zero Int]
+-- type BigR = R ["Add" := Two, "Const" := Zero Int, "Double" := One]
 
 -- constructors
 
@@ -99,7 +99,7 @@ fourB :: Mu (V1 BigR)
 fourB = mkD (mkC 2)
 
 
-fourS :: Mu (V1 SmallR)
+-- fourS :: Mu (V1 SmallR)
 fourS = desugar fourB
 
 

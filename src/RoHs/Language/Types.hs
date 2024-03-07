@@ -8,8 +8,9 @@ module RoHs.Language.Types where
 
 import GHC.Base
 
-data Row :: Type -> Type where
-  R :: [Assoc a] -> Row a
+data Row :: Type -> Type
+
+type family R (assocs :: [Assoc a]) :: Row a
 
 data Assoc :: Type -> Type where
   (:=) :: Symbol -> a -> Assoc a

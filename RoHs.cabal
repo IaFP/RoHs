@@ -55,7 +55,7 @@ common ghcopts
     ghc-options: -Wall
                  -- -ddump-rn-trace
                  -- -ddump-tc-trace
-                 -dcore-lint
+                 -- -dcore-lint
                  -- -fexplict-call-stack
 
 
