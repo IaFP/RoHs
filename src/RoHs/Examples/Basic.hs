@@ -172,17 +172,17 @@ three = Mk (con1 @"Add" (T (Mk (con1 @"Const" (Z (1::Int))))
                            (Mk (con1 @"Const" (Z (2::Int))))))
 
 
-constCase :: forall {k} {u} {a :: k} {p}. V0 (R '["Const" := Z u a]) -> p -> u
-addCase :: Num u => V0 (R '["Add" := T t]) -> (t -> u) -> u
-dblCase :: forall {k} {u} {t} {a :: k}. Num u
-        => V0 (R '["Double" := Z t a]) -> (t -> u) -> u
-negCase :: Num u => V0 (R '["Negate" := O t]) -> (t -> u) -> u
+-- constCase :: forall {k} {u} {a :: k} {p}. V1 (R '["Const" := Z u a]) -> p -> u
+-- addCase :: Num u => V1 (R '["Add" := T t]) u -> (t -> u) -> u
+-- dblCase :: forall {k} {u} {t} {a :: k}. Num u
+--         => V1 (R '["Double" := Z t a]) u -> (t -> u) -> u
+-- negCase :: Num u => V1 (R '["Negate" := O t]) u -> (t -> u) -> u
 
 
-constCase e r = case0 @"Const" (\(Z n) -> n) e
-addCase   e r = case0 @"Add"   (\(T e1 e2) -> r e1 + r e2) e
-dblCase   e r = case0 @"Double" (\(Z e) -> r e + r e) e
-negCase   e r = case0 @"Negate" (\(O e) -> - r e) e
+constCase e _ = case1 @"Const" (\(Z n) -> n) e
+addCase   e r = case1 @"Add"   (\(T e1 e2) -> r e1 + r e2) e
+dblCase   e r = case1 @"Double" (\(Z e) -> r e + r e) e
+negCase   e r = case1 @"Negate" (\(O e) -> - r e) e
 
 
 evals (Mk e) = (constCase `brn1` addCase) e where

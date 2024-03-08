@@ -53,11 +53,7 @@ extra-doc-files:    README.md
 
 common ghcopts
     ghc-options: -Wall
-                 -- -ddump-rn-trace
-                 -- -ddump-tc-trace
                  -- -dcore-lint
-                 -- -fexplict-call-stack
-
 
 library
     -- Import common warning flags.

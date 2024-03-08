@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 -- {-# OPTIONS_GHC -ddump-tc-trace -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS_GHC -ddump-tc-trace -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS_GHC -ddump-tc-trace -fprint-explicit-kinds -fplugin RoHs.Plugin #-}
 {-# OPTIONS_GHC -fplugin RoHs.Plugin #-}
 
@@ -71,7 +72,7 @@ injR (Mk e) = Mk (inj1 (fmapV injR e))
 -- down why.
 --
 type SmallR = R ["Const" := Zero Int, "Add" := Two]
-type BigR   = R ["Const" := Zero Int, "Double" := One, "Add" := Two]
+type BigR   = R ["Double" := One, "Add" := Two, "Const" := Zero Int]
 
 -- type SmallR = R ["Add" := Two, "Const" := Zero Int]
 -- type BigR = R ["Add" := Two, "Const" := Zero Int, "Double" := One]
@@ -115,9 +116,9 @@ foldV f (Mk e) = f (fmapV (foldV f) e)
 
 -- showing
 
-showC e r = case1 @"Const"  (\(Z n) -> show n) e
+showC e _ = case1 @"Const"  (\(Z n) -> show n) e
 showA e r = case1 @"Add"    (\(T e1 e2) -> "(" ++ r e1 ++ " + " ++ r e2 ++ ")") e
-showD e r = case1 @"Double" (\(O e) -> "(2 * " ++ r e ++ ")") e
+showD e' r = case1 @"Double" (\(O e) -> "(2 * " ++ r e ++ ")") e'
 
 -- eta expanding so GHC is okay with the Show constraint from showC.
 showS e = cases (showC `brn1` showA) e
@@ -125,9 +126,9 @@ showB e = cases (showC `brn1` (showD `brn1` showA)) e
 
 -- evaluating
 
-evalC e r = case1 @"Const"  (\(Z (n :: Int)) -> n) e
+evalC e _ = case1 @"Const"  (\(Z (n :: Int)) -> n) e
 evalA e r = case1 @"Add"    (\(T e1 e2) -> r e1 + r e2) e
-evalD e r = case1 @"Double" (\(O e) -> 2 * r e) e
+evalD e' r = case1 @"Double" (\(O e) -> 2 * r e) e'
 
 evalS   = cases (evalA `brn1` evalC)
 evalB   = cases ((evalA `brn1` evalD) `brn1` evalC)
@@ -138,3 +139,6 @@ desugar :: (R '["Add" := Two] ~<~ y, All Functor (R '["Double" := One] ~+~ y)) =
 desugar = foldV (desD `brn1` (Mk . inj1)) where
   -- desD :: V1 (R '["Double" := One]) (Mu (V1 z)) -> Mu (V1 z)
   desD = case1 @"Double" (\(O e) -> mkA e e)
+
+four :: Int
+four = evalB fourB

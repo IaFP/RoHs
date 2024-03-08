@@ -401,7 +401,9 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
                         API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal lhsTy rhsTy)
                   eqs
        ; u <- API.newUnique
-       ; return $ acc <> ([(mkIdEvTerm u predTy, ct)], API.mkNonCanonical <$> nws, [])
+       ; return $ acc <> ( [(API.mkPluginUnivEvTerm "RoHs.Plugin.TC" API.Nominal lhsTy rhsTy, ct)]
+                         , API.mkNonCanonical <$> nws
+                         , [] )
        }
 
 
