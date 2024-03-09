@@ -25,7 +25,6 @@ import GHC.Core.Predicate
 import GHC.Core.Type
 import GHC.Core.TyCo.Rep
 import GHC.Core.TyCon
-import GHC.Core.Utils (exprType)
 
 import RoHs.Plugin.CoreUtils hiding (mkCoercion)
 import qualified GHC.Tc.Types.Constraint as API
@@ -163,7 +162,7 @@ try_solving defs acc@(solved, unsolveds, _) givens wanteds =
 --                            2. x ~<~ x
 --                            3. (x := t) ~<~ [x := t , y := u]
 solve_trivial :: PluginDefs -> [API.Ct] -> PluginWork -> API.Ct -> API.TcPluginM API.Solve PluginWork
-solve_trivial pdf@PluginDefs{..} givens acc ct
+solve_trivial PluginDefs{..} _ acc ct
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowPlusCls
@@ -305,29 +304,6 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
        ; return $ acc <> ([(mkReflEvTerm predTy, ct)], [], []) }
 
 
-  --  Handles the case of [W] R '[ s0 := u ] ~<~ z for ambiguity checks
-  -- The given contains a dictonary  [G] R '[ s1 := u ] ~<~ z
-  -- Now we can emit an equality [W] s0 ~ s1 and solve whe [W]
-  -- | predTy <- API.ctPred ct
-  -- , Just (clsCon, ([_, wr_lhs, wz_rhs])) <- API.splitTyConApp_maybe predTy
-  -- , clsCon == API.classTyCon rowLeqCls
-  -- , [given] <- filter (leqPredMatcher pdf) givens
-  -- , Just (_, ([_, gr_lhs, gz_rhs])) <- API.splitTyConApp_maybe predTy
-  -- , API.eqType gz_rhs wz_rhs
-  -- , Just (_, [kx, assocs_gs]) <- API.splitTyConApp_maybe wr_lhs
-  -- , Just (_, [ky, assocs_ws]) <- API.splitTyConApp_maybe gr_lhs
-  -- , API.eqType kx ky
-  -- , let gs = sortAssocs $ unfold_list_type_elems assocs_gs
-  -- , let ws = sortAssocs $ unfold_list_type_elems assocs_ws
-  -- , new_eqs <- makeEqFromAssocs gs ws
-  -- = do { API.tcPluginTrace "--Plugin solving ~<~ ambiguous type--" (vcat [ ppr clsCon
-  --                                                                        , ppr given
-  --                                                                        , ppr gs, ppr ws])
-  --      ; nws <- mapM (\(lhsVar, rhsVar) ->
-  --                       API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy lhsVar) (mkTyVarTy rhsVar))
-  --                 new_eqs
-  --      ; return $ acc <> ([(mkEvTermFromGiven given, ct)], API.mkNonCanonical <$> nws) }
-
   -- Handles the case of [(x := t)] ~<~ [(x := t), (y := u)]
   -- with the case where y0 ~<~ z0 but we have a substitution which makes it true
   | predTy <- API.ctPred ct
@@ -397,10 +373,9 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
   , length rs == length ls
   , eqs <- makeEqFromAssocs rs ls
   = do { API.tcPluginTrace "--Plugin Eq RTF--" (vcat [ppr _tcL , ppr rs, ppr _tcR, ppr ls])
-       ; nws <- mapM (\(lhsTy, rhsTy) ->
-                        API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal lhsTy rhsTy)
+       ; nws <- mapM (\(lhsTy', rhsTy') ->
+                        API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal lhsTy' rhsTy')
                   eqs
-       ; u <- API.newUnique
        ; return $ acc <> ( [(API.mkPluginUnivEvTerm "RoHs.Plugin.TC" API.Nominal lhsTy rhsTy, ct)]
                          , API.mkNonCanonical <$> nws
                          , [] )
@@ -433,16 +408,6 @@ solve_trivial pdf@PluginDefs{..} givens acc ct
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
                    return $ acc <> ([], [ct], [])
 
--- | matches the given Pred that have the shape of R [ x := u ] ~<~ z
-leqPredMatcher :: PluginDefs -> API.Ct -> Bool
-leqPredMatcher pdf gPred
-  | Just (tcCls, [_, r, z]) <- API.splitTyConApp_maybe (API.ctPred gPred)
-  , Just (tc, _) <- API.splitTyConApp_maybe r
-  , tc == rTF pdf
-  , isTyVarTy z
-  = tcCls  == API.classTyCon (rowLeqCls pdf)
-  | otherwise = False
-
 
 unzipAssocList :: API.TcType -> Maybe ([API.TcType], [API.TcType])
 unzipAssocList t = unzip <$> mapM openAssoc (sortAssocs $ unfold_list_type_elems t) where
@@ -454,12 +419,6 @@ unzipAssocList t = unzip <$> mapM openAssoc (sortAssocs $ unfold_list_type_elems
     = return (lhs, rhs)
     | otherwise
     = Nothing
-
-mkEvTermFromGiven :: API.Ct -> API.EvTerm
-mkEvTermFromGiven given
-  | API.isGivenCt given
-  = API.EvExpr . API.ctEvExpr . API.ctEvidence $ given
-  |otherwise = error "mkEvTermFrom Given called non-given"
 
 
 mkLtEvTerm :: [Int] -> Type -> API.EvTerm
@@ -486,17 +445,6 @@ mkAllEvTerm evs predTy = API.evCast evAllTuple (mkCoercion API.Representational 
   evAllTupleTy = mkTupleTy1 API.Boxed [intTy, anyType]
   evAllTuple = mkCoreBoxedTuple [ mkCoreInt (length evVars)
                                 , Cast evTuple (mkCoercion API.Representational (mkConstraintTupleTy predTys)anyType)]
-
-
-mkIdEvTerm :: API.Unique -> Type -> API.EvTerm
-mkIdEvTerm u ty
- | Just (_, [_, _, lhsTy, _]) <- API.splitTyConApp_maybe ty
- , let aId = API.mkLocalId an manyDataConTy lhsTy
-       an = mkName u "_a"
-       idTy = API.mkVisFunTysMany [lhsTy] lhsTy
- = API.evCast (mkCoreLams [aId] (Var aId))
-              (mkCoercion API.Representational idTy ty)
-mkIdEvTerm u ty  = API.pprPanic "mkIdEvTerm" (ppr u $$ ppr ty)
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
 mkCoercion = API.mkPluginUnivCo "Proven by RoHs.Plugin.TC"
@@ -539,7 +487,7 @@ tcPluginRewrite defs@(PluginDefs {..}) = API.listToUFM [ (rowPlusTF, rewrite_row
 
 -- | Template interceptor for a type family tycon
 intercept_tyfam :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
-intercept_tyfam (PluginDefs { .. }) givens tys
+intercept_tyfam _ givens tys
   = do API.tcPluginTrace "--Plugin R TF--" (vcat [ ppr givens $$ ppr tys ])
        pure API.TcPluginNoRewrite
 

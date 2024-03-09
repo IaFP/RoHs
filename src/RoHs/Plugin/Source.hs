@@ -101,7 +101,14 @@ collect names = collectL where
     HsQualTy NoExtField <$> collectC ctxt <*> collectL body
   collectT t@(HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L _ (HsTyVar _ NotPromoted (L nameLoc name))) lhs)) rhs)
     | name == plusTyCon names && (not (isRowLiteral names lhs) || not (isRowLiteral names rhs)) =
-      do let p = L srcloc (HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L srcloc (HsTyVar EpAnnNotUsed NotPromoted (L nameLoc (plusPredCon names)))) lhs)) rhs)) (L srcloc t)) -- lying about source location here
+      do let p = L srcloc (HsAppTy NoExtField   -- lying about source location here
+                           (L srcloc
+                            (HsAppTy NoExtField (L srcloc
+                                                  (HsAppTy NoExtField
+                                                   (L srcloc
+                                                     (HsTyVar EpAnnNotUsed NotPromoted
+                                                       (L nameLoc (plusPredCon names)))) lhs)) rhs)) (L srcloc t))
+
          lift (traceRn ("1 At " ++ showSDocUnsafe (ppr srcloc) ++ " found use of ~+~:") (ppr t))
          tell [p]
          return t

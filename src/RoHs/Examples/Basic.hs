@@ -4,8 +4,8 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
--- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-ds -ddump-simpl -dverbose-core2core -fplugin RoHs.Plugin #-}
-{-# OPTIONS -fforce-recomp -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -dcore-lint -ddump-ds -ddump-exitify -fplugin RoHs.Plugin -fplugin-opt debug #-}
+-- {-# OPTIONS -fforce-recomp -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
 
@@ -124,77 +124,119 @@ eqV v w = anaA0 @Eq g w where
 eqV' :: V0 (R '["x" := Int, "y" := Bool]) -> V0 (R '["x" := Int, "y" := Bool]) -> Bool
 eqV' = eqV
 
-fmapV :: forall a b z. All Functor z => (a -> b) -> V1 z a -> V1 z b
-fmapV f = anaA1 @Functor g where
-
-  -- Without the `Proxy s` argument, `g` types fine but doesn't play well as n
-  -- argument to `anaA1`.... !!??
-
-  -- Can't get away without the type annotation here... even if I try to pattern
-  -- match on the proxy.  Let's pretend I understand anything.
-  g :: forall s y f. (Plus (R '[s := f]) y z, Functor f)
-                  => Proxy s -> f a -> V1 z b
-  g _ x = con1 @s (fmap f x)
-
 -- This should be enough to do something dumb.  Let's try....
-data Z k a = Z k
-  deriving Functor
-data O a    = O a
-  deriving Functor
-data T a    = T a a
-  deriving Functor
-
-data Mu f = Mk {unwrap :: f (Mu f)}
-
-type BigR = R '["Const" := Z Int] ~+~  R '["Add" := T] ~+~ R '["Double" := O]
-type SmallR = R '["Const" := Z Int] ~+~ R '["Add" := T]
 
 
-desugar' :: forall bigr smallr.
-           (-- These are essentially part of the type
-            Plus (R '["Double" := O]) smallr bigr,
-            All Functor smallr,
-            R '["Add" := T] ~<~ smallr
-           ) =>
-           Mu (V1 bigr) -> Mu (V1 smallr)
-desugar' (Mk e) = Mk ((double `brn1` (fmapV desugar' . inj1)) e) where
-  double = case1 @"Double" (\(O x) -> con1 @"Add" (T (desugar' x) (desugar' x)))
+data Zero t e = Z t     deriving Functor
+data One e    = O e     deriving Functor
+data Two e    = T e e   deriving Functor
 
-desugar :: Mu (V1 BigR) -> Mu (V1 SmallR)
--- Here's a very explicit type...
--- desugar = desugar'
-desugar (Mk e) = Mk ((double `brn1` (fmapV desugar . inj1)) e) where
-  double = case1 @"Double" (\(O x) -> con1 @"Add" (T (desugar x) (desugar x)))
+data Mu f     = Mk (f (Mu f))
+
+-- instance All Functor z => Functor (V1 z) where
+--   fmap f v = anaA1 @Functor (\_ d -> fmap f d) v
+
+fmapV :: All Functor z => (a -> b) -> V1 z a -> V1 z b
+fmapV f = anaA1 @Functor (\(_ :: Proxy s) d -> con1 @s (fmap f d))
+
+-- recursive injection
+
+injR :: (y ~<~ z, All Functor y) => Mu (V1 y) -> Mu (V1 z)
+injR (Mk e) = Mk (inj1 (fmapV injR e))
+
+-- expressions
+
+-- We seem to need type synonyms to be declared in sorted order... need to track
+-- down why.
+--
+type SmallR = R ["Const" := Zero Int, "Add" := Two]
+type BigR   = R ["Double" := One, "Add" := Two, "Const" := Zero Int]
+
+-- type SmallR = R ["Add" := Two, "Const" := Zero Int]
+-- type BigR = R ["Add" := Two, "Const" := Zero Int, "Double" := One]
+
+-- constructors
+
+mkC :: R '["Const" := Zero Int] ~<~ z => Int -> Mu (V1 z)
+mkC n = Mk (con1 @"Const" (Z n))
+
+mkA :: R '["Add" := Two] ~<~ z => Mu (V1 z) -> Mu (V1 z) -> Mu (V1 z)
+mkA e1 e2 = Mk (con1 @"Add" (T e1 e2))
+
+mkD :: R '["Double" := One] ~<~ z => Mu (V1 z) -> Mu (V1 z)
+mkD e = Mk (con1 @"Double" (O e))
+
+-- examples
+
+threeS :: Mu (V1 SmallR)
+threeS = mkA (mkC 1) (mkC 2)
+
+threeB :: Mu (V1 BigR)
+threeB = mkA (mkC 1) (mkC 2)
+
+fourB :: Mu (V1 BigR)
+fourB = mkD (mkC 2)
 
 
-three :: Mu (V1 SmallR)
-three = Mk (con1 @"Add" (T (Mk (con1 @"Const" (Z (1::Int))))
-                           (Mk (con1 @"Const" (Z (2::Int))))))
+-- fourS :: Mu (V1 SmallR)
+fourS = desugar @SmallR fourB -- without the type annotation GHC type checker generates a weird core which doesn't core-lint
+
+-- folds
+
+-- check order compared to paper, paper is wrong
+cases :: (V1 z (Mu (V1 z)) -> (Mu (V1 z) -> r) -> r) -> Mu (V1 z) -> r
+cases f (Mk e) = f e (cases f)
+
+foldV :: All Functor z => (V1 z r -> r) -> Mu (V1 z) -> r
+foldV f (Mk e) = f (fmapV (foldV f) e)
+
+class MyShow a where
+  myShow :: a -> String
+  myShow2 :: a -> String
+
+instance MyShow Int where
+    myShow _ = "A"
+    myShow2 a = show a
+-- showing
+
+showC :: V1 (R '["Const" := Zero Int]) t -> p -> String
+showA :: V1 (R '["Add" := Two]) t -> (t -> String) -> String
+showD :: V1 (R '["Double" := One]) t -> (t -> String) -> String
+
+showC e _ = case1 @"Const"  (\(Z n) -> myShow n) e
+showA e r = case1 @"Add"    (\(T e1 e2) -> "(" ++ r e1 ++ " + " ++ r e2 ++ ")") e
+showD e' r = case1 @"Double" (\(O e) -> "(2 * " ++ r e ++ ")") e'
+
+-- eta expanding so GHC is okay with the Show constraint from showC.
+
+showS :: Mu (V1 SmallR) -> String
+showB :: Mu (V1 BigR) -> String
+
+showS = cases (showC `brn1` showA)
+showB = cases (showC `brn1` (showD `brn1` showA))
+
+-- evaluating
+
+evalC e _ = case1 @"Const"  (\(Z (n :: Int)) -> n) e
+evalA e r = case1 @"Add"    (\(T e1 e2) -> r e1 + r e2) e
+evalD e' r = case1 @"Double" (\(O e) -> 2 * r e) e'
 
 
--- constCase :: forall {k} {u} {a :: k} {p}. V1 (R '["Const" := Z u a]) -> p -> u
--- addCase :: Num u => V1 (R '["Add" := T t]) u -> (t -> u) -> u
--- dblCase :: forall {k} {u} {t} {a :: k}. Num u
---         => V1 (R '["Double" := Z t a]) u -> (t -> u) -> u
--- negCase :: Num u => V1 (R '["Negate" := O t]) u -> (t -> u) -> u
+evalS :: Mu (V1 SmallR) -> Int
+evalB :: Mu (V1 BigR) -> Int
 
+evalS   = cases (evalA `brn1` evalC)
+evalB   = cases ((evalA `brn1` evalD) `brn1` evalC)
 
-constCase e _ = case1 @"Const" (\(Z n) -> n) e
-addCase   e r = case1 @"Add"   (\(T e1 e2) -> r e1 + r e2) e
-dblCase   e r = case1 @"Double" (\(Z e) -> r e + r e) e
-negCase   e r = case1 @"Negate" (\(O e) -> - r e) e
+-- desugaring
 
+desugar :: (R '["Add" := Two] ~<~ y, All Functor (R '["Double" := One] ~+~ y)) => Mu (V1 (R '["Double" := One] ~+~ y)) -> Mu (V1 y)
+desugar = foldV (desD `brn1` (Mk . inj1)) where
+  -- desD :: V1 (R '["Double" := One]) (Mu (V1 z)) -> Mu (V1 z)
+  desD = case1 @"Double" (\(O e) -> mkA e e)
 
-evals (Mk e) = (constCase `brn1` addCase) e where
-  constCase = case1 @"Const" (\(Z n) -> n)
-  addCase   = case1 @"Add"   (\(T e1 e2) -> evals e1 + evals e2)
+numFour :: Int
+numFour = evalB fourB
 
-
-cases :: ((Mu f -> t) -> f (Mu f) -> t) -> Mu f -> t
-cases f (Mk e) = f (cases f) e
-
-
--- evals' :: Mu (V1 SmallR) -> Int
--- evals' e = cases (constCase `brn1` addCase) e where
---   constCase = case1 @"Const" (\(Z n) -> n)
---   addCase   = case1 @"Add"   (\(T e1 e2) -> evals e1 + evals e2)
+showFour :: String
+showFour = showB fourB

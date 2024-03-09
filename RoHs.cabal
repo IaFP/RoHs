@@ -53,7 +53,7 @@ extra-doc-files:    README.md
 
 common ghcopts
     ghc-options: -Wall
-                 -- -dcore-lint
+                 -dcore-lint
 
 library
     -- Import common warning flags.
@@ -66,7 +66,7 @@ library
                       RoHs.Plugin
 
                       RoHs.Examples.Basic
-                      RoHs.Examples.Paper
+                      -- RoHs.Examples.Paper
 
     -- Modules included in this library but not exported.
     other-modules:

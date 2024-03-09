@@ -1,6 +1,5 @@
-{-# LANGUAGE DataKinds, TypeFamilies #-}
--- {-# OPTIONS_GHC -ddump-tc-trace -fplugin RoHs.Plugin #-}
--- {-# OPTIONS_GHC -ddump-tc-trace -fplugin RoHs.Plugin #-}
+{-# LANGUAGE AllowAmbiguousTypes, DataKinds, TypeFamilies #-}
+-- {-# OPTIONS_GHC -ddump-tc-trace -ddump-ds -dverbose-core2core -dsuppress-module-prefixes -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS_GHC -ddump-tc-trace -fprint-explicit-kinds -fplugin RoHs.Plugin #-}
 {-# OPTIONS_GHC -fplugin RoHs.Plugin #-}
 
@@ -101,8 +100,7 @@ fourB = mkD (mkC 2)
 
 
 -- fourS :: Mu (V1 SmallR)
-fourS = desugar fourB
-
+fourS = desugar @SmallR fourB -- without the type annotation GHC type checker generates a weird core which doesn't core-lint
 
 -- folds
 
@@ -113,10 +111,14 @@ cases f (Mk e) = f e (cases f)
 foldV :: All Functor z => (V1 z r -> r) -> Mu (V1 z) -> r
 foldV f (Mk e) = f (fmapV (foldV f) e)
 
+class Show a => MyShow a where
+  myShow :: a -> String
 
+instance MyShow Int where
+    myShow a = "A" ++ show a
 -- showing
 
-showC e _ = case1 @"Const"  (\(Z n) -> show n) e
+showC e _ = case1 @"Const"  (\(Z n) -> myShow n) e
 showA e r = case1 @"Add"    (\(T e1 e2) -> "(" ++ r e1 ++ " + " ++ r e2 ++ ")") e
 showD e' r = case1 @"Double" (\(O e) -> "(2 * " ++ r e ++ ")") e'
 
@@ -140,5 +142,8 @@ desugar = foldV (desD `brn1` (Mk . inj1)) where
   -- desD :: V1 (R '["Double" := One]) (Mu (V1 z)) -> Mu (V1 z)
   desD = case1 @"Double" (\(O e) -> mkA e e)
 
-four :: Int
-four = evalB fourB
+numFour :: Int
+numFour = evalB fourB
+
+showFour :: String
+showFour = showB fourB
