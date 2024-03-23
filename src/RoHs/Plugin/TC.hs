@@ -124,14 +124,16 @@ tcPluginSolve :: PluginDefs -> [ API.Ct ] -> [ API.Ct ] -> API.TcPluginM API.Sol
 tcPluginSolve _ _ [] = do -- simplify given constraints, we don't have to worry about it yet
   pure $ API.TcPluginOk [] []
 tcPluginSolve defs givens wanteds = do
-  API.tcPluginTrace "--Plugin Solve Wanteds Start--" (ppr givens $$ ppr wanteds)
+  API.tcPluginTrace "--tcPluginSolveStart--" (ppr givens $$ ppr wanteds)
   (solved, ws, insolubles) <- main_solver defs givens wanteds
-  API.tcPluginTrace "--Plugin Solve Wanteds Done--" (vcat [ ppr wanteds
-                                                          , text "---------------"
-                                                          , ppr solved
-                                                          , text "---------------"
-                                                          , ppr insolubles
-                                                          ])
+  API.tcPluginTrace "--tcPluginSolveEnd--" (vcat [ ppr wanteds
+                                              , text "------solved---------"
+                                              , ppr solved
+                                              , text "----new_wanted--------"
+                                              , ppr ws
+                                              , text "-----insolubles----------"
+                                              , ppr insolubles
+                                              ])
   if not (null insolubles)
   then return $ API.TcPluginContradiction insolubles
   else return $ API.TcPluginOk solved ws
@@ -146,11 +148,13 @@ main_solver defs givens wanteds = try_solving defs ([], [], []) givens wanteds -
 --       2. if we have made some progress go to step 0
 try_solving :: PluginDefs -> PluginWork -> [API.Ct] -> [API.Ct] -> API.TcPluginM API.Solve PluginWork
 try_solving defs acc@(solved, unsolveds, _) givens wanteds =
-  do acc'@(solved', _, insol') <- foldlM (solve_trivial defs givens) acc wanteds
-     API.tcPluginTrace "--Plugin Solve Improvements--" (vcat [ ppr unsolveds, ppr insol' ])
-     if madeProgress solved solved'
-     then foldlM (solve_trivial defs givens) acc' unsolveds
-     else return $ acc <> ([], [], insol')
+  do acc'@(solved', new_wanteds, insol') <- foldlM (solve_trivial defs givens) acc wanteds
+     API.tcPluginTrace "--Plugin Solve Improvements--" (vcat [ ppr unsolveds, ppr new_wanteds, ppr insol' ])
+     if any (isEqPrimPred . API.ctPred) new_wanteds
+       then return $ acc <> acc'
+       else if madeProgress solved solved'
+            then foldlM (solve_trivial defs givens) acc' unsolveds
+            else return $ acc <> ([], [], insol')
 
         -- we only make progress when we either solve more things
   where madeProgress s s' = length s' > length s
@@ -170,9 +174,9 @@ solve_trivial PluginDefs{..} _ acc ct
   , Just y_s@(r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
   , Just z_s@(r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
   -- , r_tycon1 == r_tycon2 && r_tycon2 == r_tycon3 && r_tycon3 == rowTyCon -- should we be checking that the _r_tycon's are actually `R`?
-  , let xs = sortAssocs $ unfold_list_type_elems assocs_x
-  , let ys = sortAssocs $ unfold_list_type_elems assocs_y
-  , let zs = sortAssocs $ unfold_list_type_elems assocs_z
+  , let xs = unfold_list_type_elems assocs_x
+  , let ys = unfold_list_type_elems assocs_y
+  , let zs = unfold_list_type_elems assocs_z
   , length xs + length ys == length zs
   , Just ps <- checkConcatEv xs ys zs
   = do { API.tcPluginTrace "--Plugin solving Plus construct evidence for z--"
@@ -189,8 +193,8 @@ solve_trivial PluginDefs{..} _ acc ct
   , clsCon == API.classTyCon rowPlusCls
   , Just (r_tycon, [k, assocs_x])<- API.splitTyConApp_maybe x
   , Just (_, [_, assocs_z])<- API.splitTyConApp_maybe z
-  , let xs = sortAssocs $ unfold_list_type_elems assocs_x
-  , let zs = sortAssocs $ unfold_list_type_elems assocs_z
+  , let xs = unfold_list_type_elems assocs_x
+  , let zs = unfold_list_type_elems assocs_z
   , Just yTVar <- getTyVar_maybe y
   -- y is just a type variable which we will solve for
   , Just _is <- checkSubsetEv xs zs
@@ -203,8 +207,9 @@ solve_trivial PluginDefs{..} _ acc ct
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
        ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
        ; new_eq_wanted <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
-       ; return $ acc <> ([(mkPlusEvTerm ps predTy, ct)]
-                         , API.mkNonCanonical <$> [nw, new_eq_wanted] -- no new wanteds
+       ; return $ acc <> ([]
+                             -- [(mkPlusEvTerm ps predTy, ct)]
+                         , API.mkNonCanonical <$> [nw, new_eq_wanted]
                          , []
                          )
        }
@@ -217,8 +222,8 @@ solve_trivial PluginDefs{..} _ acc ct
   , clsCon == API.classTyCon rowPlusCls
   , Just (rx_tycon, [k, assocs_x])<- API.splitTyConApp_maybe x
   , Just (rz_tycon, [_, assocs_z])<- API.splitTyConApp_maybe z
-  , let xs = sortAssocs $ unfold_list_type_elems assocs_x
-  , let zs = sortAssocs $ unfold_list_type_elems assocs_z
+  , let xs = unfold_list_type_elems assocs_x
+  , let zs = unfold_list_type_elems assocs_z
   , Just yTVar <- getTyVar_maybe y
   , rx_tycon == rz_tycon
   , let r_tycon = rx_tycon
@@ -233,7 +238,8 @@ solve_trivial PluginDefs{..} _ acc ct
        ; API.tcPluginTrace "--Plugin solving Plus construct evidence for x--"
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
        ; nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
-       ; return $ acc <> ([ ( mkPlusEvTerm ps predTy, ct) ]
+       ; return $ acc <> ([ -- ( mkPlusEvTerm ps predTy, ct)
+                          ]
                          , [API.mkNonCanonical nw] -- no new wanteds
                          , []
                          )
@@ -274,8 +280,8 @@ solve_trivial PluginDefs{..} _ acc ct
   , Just (_, [ky, assocs_y])<- API.splitTyConApp_maybe y
   , API.eqType kx ky -- x and y should be of the same row kinds
   , Just zTVar <- getTyVar_maybe z  -- z is a type variable
-  , let xs = sortAssocs $ unfold_list_type_elems assocs_x
-  , let ys = sortAssocs $ unfold_list_type_elems assocs_y
+  , let xs = unfold_list_type_elems assocs_x
+  , let ys = unfold_list_type_elems assocs_y
   , let zs = sortAssocs (xs ++ ys)
   , Just ps <- checkConcatEv xs ys zs
   =  do { API.tcPluginTrace "--Plugin solving simple Plus--" (vcat [ ppr clsCon
@@ -290,7 +296,10 @@ solve_trivial PluginDefs{..} _ acc ct
         ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--"
              (text "computed" <+> ppr zTVar <+> text "=:=" <+> ppr z0)
 
-        ; return $ acc <> ([(mkPlusEvTerm ps predTy, ct)], [API.mkNonCanonical nw], [])
+        ; return $ acc <> ([
+                             -- (mkPlusEvTerm ps predTy, ct)
+                           ]
+                          , [API.mkNonCanonical nw], [])
         }
 
 
@@ -311,8 +320,8 @@ solve_trivial PluginDefs{..} _ acc ct
   , clsCon == API.classTyCon rowLeqCls
   , Just x_s@(_r_tycon1, [kx, assocs_x]) <- API.splitTyConApp_maybe x
   , Just y_s@(_r_tycon2, [ky, assocs_y]) <- API.splitTyConApp_maybe y
-  , let xs = sortAssocs $ unfold_list_type_elems assocs_x
-  , let ys = sortAssocs $ unfold_list_type_elems assocs_y
+  , let xs = unfold_list_type_elems assocs_x
+  , let ys = unfold_list_type_elems assocs_y
   , API.eqType kx ky -- we are not having hetrogenous row concat
   , Just is <- checkSubsetEv xs ys
   =  do { API.tcPluginTrace "--Plugin solving ~<~ construct evidence--"
@@ -344,8 +353,8 @@ solve_trivial PluginDefs{..} _ acc ct
   , Just (_ , [k , assocs]) <- API.splitTyConApp_maybe r
   , Just (tcRhs , [_ , rhsAssocs]) <- API.splitTyConApp_maybe rhsTy
   , tcRhs == rTF
-  , let xs = sortAssocs $ unfold_list_type_elems assocs
-  , let ys = sortAssocs $ unfold_list_type_elems rhsAssocs
+  , let xs = unfold_list_type_elems assocs
+  , let ys = unfold_list_type_elems rhsAssocs
   , let diff = sortAssocs $ setDiff xs ys
   = do { API.tcPluginTrace "--Plugin solving Type Eq rule--" (vcat [ppr _tc , ppr assocs, ppr rhsAssocs, ppr diff])
        ; let rowAssocKi = mkTyConApp rowAssocTyCon [k]
@@ -367,8 +376,8 @@ solve_trivial PluginDefs{..} _ acc ct
   , Just (_tcR, [kr, ras]) <- API.splitTyConApp_maybe rhsTy
   , _tcL == rTF
   , _tcR == rTF
-  , let rs = sortAssocs $ unfold_list_type_elems ras
-  , let ls = sortAssocs $ unfold_list_type_elems las
+  , let rs = unfold_list_type_elems ras
+  , let ls = unfold_list_type_elems las
   , API.eqType kr kl
   , length rs == length ls
   , eqs <- makeEqFromAssocs rs ls
@@ -410,7 +419,7 @@ solve_trivial PluginDefs{..} _ acc ct
 
 
 unzipAssocList :: API.TcType -> Maybe ([API.TcType], [API.TcType])
-unzipAssocList t = unzip <$> mapM openAssoc (sortAssocs $ unfold_list_type_elems t) where
+unzipAssocList t = unzip <$> mapM openAssoc (unfold_list_type_elems t) where
 
   openAssoc :: API.TcType -> Maybe (API.TcType, API.TcType)
   openAssoc tup
@@ -451,7 +460,7 @@ mkCoercion = API.mkPluginUnivCo "Proven by RoHs.Plugin.TC"
 
 -- If you get a list of assocs, flatten it out
 unfold_list_type_elems :: API.TcType -> [API.TcType]
-unfold_list_type_elems =  go []
+unfold_list_type_elems ty =  sortAssocs $ go [] ty
   where
     go :: [API.TcType] -> API.TcType -> [API.TcType]
     go acc ty | Nothing <- API.splitTyConApp_maybe ty
@@ -482,14 +491,14 @@ tcPluginStop _ = do
 -- We have to possibly rewrite ~+~ type family applications
 tcPluginRewrite :: PluginDefs -> API.UniqFM API.TyCon API.TcPluginRewriter
 tcPluginRewrite defs@(PluginDefs {..}) = API.listToUFM [ (rowPlusTF, rewrite_rowplus defs)
-                                                       , (rTF, intercept_tyfam defs)
+                                                       -- , (rTF, intercept_tyfam defs)
                                                        ]
 
 -- | Template interceptor for a type family tycon
-intercept_tyfam :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
-intercept_tyfam _ givens tys
-  = do API.tcPluginTrace "--Plugin R TF--" (vcat [ ppr givens $$ ppr tys ])
-       pure API.TcPluginNoRewrite
+-- intercept_tyfam :: PluginDefs -> [API.Ct] -> [API.TcType] -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
+-- intercept_tyfam _ givens tys
+--   = do API.tcPluginTrace "--Plugin R TF--" (vcat [ ppr givens $$ ppr tys ])
+--        pure API.TcPluginNoRewrite
 
 -- | Reduce (x := t) ~+~ (y := u) to [x := t, y := u]
 --   Post condition: The label occurance in the list is lexicographic.
@@ -498,8 +507,8 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
   | [_, a, b] <- tys
   , Just (_ , [ka, arg_a]) <- API.splitTyConApp_maybe a
   , Just (_ , [kb, arg_b]) <- API.splitTyConApp_maybe b
-  , assocs_a <- sortAssocs $ unfold_list_type_elems arg_a
-  , assocs_b <- sortAssocs $ unfold_list_type_elems arg_b
+  , assocs_a <- unfold_list_type_elems arg_a
+  , assocs_b <- unfold_list_type_elems arg_b
   , API.eqType ka kb
   , let rowAssocKi = mkTyConApp rowAssocTyCon [ka]
   = do { let inter = setIntersect assocs_a assocs_b
@@ -511,6 +520,7 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
                                                                      , text "args_b:" <+> ppr assocs_b
                                                                      , text "args:"   <+> ppr concat_assocs
                                                                      , text "givens:" <+> ppr _givens
+                                                                     , text "redn:"  <+> ppr redn
                                                                      ])
                  ; return $ API.TcPluginRewriteTo redn []
                  }
