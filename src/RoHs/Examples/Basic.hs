@@ -4,8 +4,8 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
-{-# OPTIONS -fforce-recomp -dcore-lint -ddump-ds -ddump-exitify -fplugin RoHs.Plugin -fplugin-opt debug #-}
--- {-# OPTIONS -fforce-recomp -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-ds -O0 -dasm-lint -dcmm-lint -ddump-asm-native -ddump-exitify -fplugin RoHs.Plugin -fplugin-opt debug #-}
+{-# OPTIONS -fforce-recomp -dcore-lint -O0 -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
 
@@ -133,6 +133,9 @@ data Two e    = T e e   deriving Functor
 
 data Mu f     = Mk (f (Mu f))
 
+instance Show t => Show (Zero t e) where
+  show (Z t) =  "Z " ++ show t
+
 -- instance All Functor z => Functor (V1 z) where
 --   fmap f v = anaA1 @Functor (\_ d -> fmap f d) v
 
@@ -167,6 +170,12 @@ mkD :: R '["Double" := One] ~<~ z => Mu (V1 z) -> Mu (V1 z)
 mkD e = Mk (con1 @"Double" (O e))
 
 -- examples
+oneC :: Mu (V1 (R '["Const" := Zero Int]))
+oneC = (mkC 1)
+
+zeroC :: Mu (V1 (R '["Const" := Zero Int]))
+zeroC = (mkC 0)
+
 
 threeS :: Mu (V1 SmallR)
 threeS = mkA (mkC 1) (mkC 2)
@@ -178,8 +187,8 @@ fourB :: Mu (V1 BigR)
 fourB = mkD (mkC 2)
 
 
--- fourS :: Mu (V1 SmallR)
-fourS = desugar @SmallR fourB -- without the type annotation GHC type checker generates a weird core which doesn't core-lint
+fourS :: Mu (V1 SmallR)
+fourS = desugar fourB -- without the type annotation GHC type checker generates a weird core which doesn't core-lint
 
 -- folds
 
@@ -203,7 +212,7 @@ showC :: V1 (R '["Const" := Zero Int]) t -> p -> String
 showA :: V1 (R '["Add" := Two]) t -> (t -> String) -> String
 showD :: V1 (R '["Double" := One]) t -> (t -> String) -> String
 
-showC e _ = case1 @"Const"  (\(Z n) -> myShow n) e
+showC e _ = case1 @"Const"  (\(Z n) -> show n) e
 showA e r = case1 @"Add"    (\(T e1 e2) -> "(" ++ r e1 ++ " + " ++ r e2 ++ ")") e
 showD e' r = case1 @"Double" (\(O e) -> "(2 * " ++ r e ++ ")") e'
 
@@ -216,6 +225,9 @@ showS = cases (showC `brn1` showA)
 showB = cases (showC `brn1` (showD `brn1` showA))
 
 -- evaluating
+evalC :: V1 (R '["Const" := Zero Int]) t -> p -> Int
+evalA :: V1 (R '["Add" := Two]) t -> (t -> Int) -> Int
+evalD :: V1 (R '["Double" := One]) t -> (t -> Int) -> Int
 
 evalC e _ = case1 @"Const"  (\(Z (n :: Int)) -> n) e
 evalA e r = case1 @"Add"    (\(T e1 e2) -> r e1 + r e2) e
@@ -240,3 +252,9 @@ numFour = evalB fourB
 
 showFour :: String
 showFour = showB fourB
+
+evalOneC :: Int
+evalOneC = cases evalC oneC
+
+showOneC :: String
+showOneC = cases showC oneC
