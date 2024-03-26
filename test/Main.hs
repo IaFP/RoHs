@@ -15,36 +15,62 @@
 module Main where
 
 import RoHs.Language.Lib
-import RoHs.Examples.Basic
+-- import RoHs.Examples.Basic
 
-s1 :: R0 (R '["x" := Int])
-s1 = labR0 @"x" (1::Int)
+import Test.Tasty
+import Test.Tasty.HUnit
+import Test.Tasty.ExpectedFailure
+import Test.Tasty.SmallCheck as SC
+import Test.Tasty.QuickCheck as QC
 
-s2 :: R0 (R '["x" := Bool])
-s2 = labR0 @"x" (True::Bool)
 
-s3 :: R0 (R '["y" := Bool])
-s3 = labR0 @"y" (True::Bool)
+main :: IO ()
+main = defaultMain tests
 
-s4 :: R0 (R '["w" := Bool])
-s4 = labR0 @"w" (True::Bool)
+tests :: TestTree
+tests = testGroup "TestSuite" [ units, properties ]
+
+
+rec_lab_Int :: Int ->  R0 (R '["x" := Int])
+rec_lab_Int x = labR0 @"x" x
+
+rec_unlab_Int :: R0 (R '["x" := Int]) -> Int
+rec_unlab_Int r = unlabR0 @"x" r
+
+-- s1 :: R0 (R '["x" := Int])
+-- s1 = labR0 @"x" (1::Int)
+
+-- s2 :: R0 (R '["x" := Bool])
+-- s2 = labR0 @"x" (True::Bool)
+
+-- s3 :: R0 (R '["y" := Bool])
+-- s3 = labR0 @"y" (True::Bool)
+
+-- s4 :: R0 (R '["w" := Bool])
+-- s4 = labR0 @"w" (True::Bool)
 
 -- Same labels should give an error
 -- same_labels :: R0 (R '["x" := Int] ~+~ (R '["x" := Bool]))
 -- same_labels = s1 `cat0` s2
 
-curried_labs :: forall z.  R0 z -> R0 (R '["x" := Int] ~+~ z)
-curried_labs y = s1 `cat0` y
+-- curried_labs :: forall z.  R0 z -> R0 (R '["x" := Int] ~+~ z)
+-- curried_labs y = s1 `cat0` y
 
 -- should_fail = curried_lables s3
 
-row_int_bool :: R0 (R '["x" := Int, "y" := Bool])
-row_int_bool = s1 `cat0` s3
+-- row_int_bool :: R0 (R '["x" := Int, "y" := Bool])
+-- row_int_bool = s1 `cat0` s3
 
-main :: IO ()
-main = do
-  putStrLn "-----Start of test-----"
-  putStrLn $ "s1 val" ++ (show (unlabR0 @"x" s1))
-  putStrLn $ "s3 val" ++ (show (unlabR0 @"y" s3))
-  putStrLn $ "answer to everything" ++ (show answer_to_everything)
-  putStrLn "----Start of test------"
+
+
+properties :: TestTree
+properties = testGroup "Properties Testsuite"
+  [ SC.testProperty "unlabR0 . labR0 = id" $
+      \ (x :: Int) -> (rec_unlab_Int (rec_lab_Int x) == x)
+  ]
+
+units :: TestTree
+units = testGroup "Unit Testsuite"
+  [ testCase "Row unlabel after label is identity" $
+      (unlabR0 @"x" (labR0 @"x" (1 :: Int))) @?= 1
+  ]

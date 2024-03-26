@@ -165,6 +165,13 @@ test-suite RoHs-test
         ghc-tcplugins-extra ^>= 0.4.5,
         syb ^>= 0.7,
 
+        tasty ^>= 1.5,
+        tasty-hunit,
+        tasty-smallcheck,
+        tasty-quickcheck,
+        tasty-expected-failure,
+        tasty-hspec,
+
         mtl ^>= 2.3,
         containers,
 
