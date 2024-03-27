@@ -3,12 +3,27 @@ RoHs
 
 Experimenting with row types in GHC using a plugin
 
-- How to compile?
+- How to compile? set GHC to `9.6.4` (`ghcup tui` is your friend)
+```
+$ cabal configure --enable-tests
+$ cabal build
+```
 
-	- set GHC to `9.6.4` (`ghcup` is your friend)
-
-	- ```$ cabal build```
+- How to run tests?
+```
+$ cabal test
+```
 
 - How to run?
-
-If it typechecks, why do you need to run it?
+     - The repl way:
+     ```
+     $ cabal repl
+     ghci> :set -XDataKinds -fplugin RoHs.Plugin
+     ghci> import RoHs.Language.Lib
+     ghci> import RoHs.Examples.Basic -- contains some basic examples
+     ghci> ...
+     ```
+     - The compile way
+     ```
+     $ cabal run RoHs-sample-exe
+     ```
