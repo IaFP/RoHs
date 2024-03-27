@@ -4,8 +4,8 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
--- {-# OPTIONS -fforce-recomp -dcore-lint -ddump-ds -O0 -dasm-lint -dcmm-lint -ddump-asm-native -ddump-exitify -fplugin RoHs.Plugin -fplugin-opt debug #-}
-{-# OPTIONS -fforce-recomp -dcore-lint -O0 -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS -ddump-tc-trace -fforce-recomp -dcore-lint -ddump-ds -O0 -dasm-lint -dcmm-lint -ddump-asm-native -ddump-exitify -fplugin RoHs.Plugin -fplugin-opt debug #-}
+{-# OPTIONS -dcore-lint -O0 -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
 
@@ -194,7 +194,7 @@ fourS = desugar fourB -- without the type annotation GHC type checker generates 
 
 -- check order compared to paper, paper is wrong
 cases :: (V1 z (Mu (V1 z)) -> (Mu (V1 z) -> r) -> r) -> Mu (V1 z) -> r
-cases f (Mk e) = f e (cases f)
+cases f (Mk e) = let x = cases f in f e x
 
 foldV :: All Functor z => (V1 z r -> r) -> Mu (V1 z) -> r
 foldV f (Mk e) = f (fmapV (foldV f) e)

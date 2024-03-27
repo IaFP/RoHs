@@ -6,48 +6,33 @@
 
 
 -- Make sure you have `cabal configure --enable-tests` before running this
--- TODO: move the test to its own module so that building it doesn't make the whole cabal
--- process crash
 -- {-# OPTIONS -fforce-recomp -ddump-ds -ddump-simpl -dsuppress-module-prefixes -dsuppress-idinfo -dsuppress-coercions -fplugin RoHs.Plugin #-}
 
-{-# OPTIONS  -fforce-recomp -fplugin RoHs.Plugin #-}
+{-# OPTIONS  -fforce-recomp -ddump-tc-trace -fplugin RoHs.Plugin #-}
 
 module Main where
 
 import RoHs.Language.Lib
--- import RoHs.Examples.Basic
 
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.ExpectedFailure
 import Test.Tasty.SmallCheck as SC
-import Test.Tasty.QuickCheck as QC
+-- import Test.Tasty.QuickCheck as QC
 
 
-main :: IO ()
+main :: IO (())
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "TestSuite" [ units, properties ]
+tests = testGroup "TestSuite" [ units, properties, expectFail fails ]
 
+rec1 :: R0 (R '["x" := Int])
+rec1 = labR0 @"x" (1::Int)
 
-rec_lab_Int :: Int ->  R0 (R '["x" := Int])
-rec_lab_Int x = labR0 @"x" x
+rec2 :: R0 (R '["y" := Bool])
+rec2 = labR0 @"y" (True::Bool)
 
-rec_unlab_Int :: R0 (R '["x" := Int]) -> Int
-rec_unlab_Int r = unlabR0 @"x" r
-
--- s1 :: R0 (R '["x" := Int])
--- s1 = labR0 @"x" (1::Int)
-
--- s2 :: R0 (R '["x" := Bool])
--- s2 = labR0 @"x" (True::Bool)
-
--- s3 :: R0 (R '["y" := Bool])
--- s3 = labR0 @"y" (True::Bool)
-
--- s4 :: R0 (R '["w" := Bool])
--- s4 = labR0 @"w" (True::Bool)
 
 -- Same labels should give an error
 -- same_labels :: R0 (R '["x" := Int] ~+~ (R '["x" := Bool]))
@@ -66,11 +51,26 @@ rec_unlab_Int r = unlabR0 @"x" r
 properties :: TestTree
 properties = testGroup "Properties Testsuite"
   [ SC.testProperty "unlabR0 . labR0 = id" $
-      \ (x :: Int) -> (rec_unlab_Int (rec_lab_Int x) == x)
+      \ (x :: Int) -> (unlabR0 @"x" (labR0 @"x" x) == x)
+  , SC.testProperty "Records are commutative" $
+      \ (x :: Int) (y :: Int) -> let r1 :: R0 (R '["x" := Int, "y" := Int ]) = (labR0 @"y" y) `cat0` (labR0 @"x" x) in
+                                   let r2 :: R0 (R '["y" := Int, "x" := Int ]) = (labR0 @"x" x) `cat0` (labR0 @"y" y) in
+                                     (==) @Int (unlabR0 @"x" (prj0 r1)) (unlabR0 @"x" (prj0 r2))
   ]
 
 units :: TestTree
 units = testGroup "Unit Testsuite"
   [ testCase "Row unlabel after label is identity" $
       (unlabR0 @"x" (labR0 @"x" (1 :: Int))) @?= 1
+
+  , testCase "concat is commutative" $
+      (@?=) @Int (unlabR0 @"x" (prj0 $ cat0 rec1 rec2)) (unlabR0 @"x" (prj0 $ cat0 rec2 rec1))
+
+  ]
+
+
+fails :: TestTree
+fails = testGroup "Fail Testsuite"
+  [ testCase "Same label error" $
+        (@?=) @Int (unlabR0 @"x" (prj0 $ rec1 `cat0` rec1)) 1
   ]

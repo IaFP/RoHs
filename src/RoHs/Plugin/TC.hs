@@ -290,16 +290,21 @@ solve_trivial PluginDefs{..} _ acc ct
                                                                     ])
         ; let rowAssocKi = mkTyConApp rowAssocTyCon [kx]
               z0 = API.mkTyConApp r_tycon [kx,  mkPromotedListTy rowAssocKi zs]
-        ; nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy zTVar) z0-- (API.substType [(zTVar, z0)] predTy)
-        ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
-        ; API.tcPluginTrace "Generated new ct" (ppr nw)
-        ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--"
-             (text "computed" <+> ppr zTVar <+> text "=:=" <+> ppr z0)
-
-        ; return $ acc <> ([
-                             -- (mkPlusEvTerm ps predTy, ct)
-                           ]
+              inter = setIntersect xs ys
+        ; if null inter
+          then do { nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy zTVar) z0
+                  ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
+                  ; API.tcPluginTrace "Generated new ct" (ppr nw)
+                  ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--"
+                    (text "computed" <+> ppr zTVar <+> text "=:=" <+> ppr z0)
+                  ; return $ acc <> ([]
                           , [API.mkNonCanonical nw], [])
+                  }
+          else do { API.tcPluginTrace "--Plugin overlapping rows--" (ppr ct)
+                  ; error_predTy <- API.mkTcPluginErrorTy (mkSameLabelError x y inter)
+                  ; nw_error <- API.newWanted (API.ctLoc ct) error_predTy
+                  ; return $ acc <> ([], [], [API.mkNonCanonical nw_error])
+                  }
         }
 
 
@@ -390,8 +395,6 @@ solve_trivial PluginDefs{..} _ acc ct
                          , [] )
        }
 
-
-
   -- We want to reject equalities between V0 x and V1 y
   | predTy <- API.ctPred ct
   , isEqPrimPred predTy
@@ -401,17 +404,47 @@ solve_trivial PluginDefs{..} _ acc ct
   , lhsTc /= rhsTc
   , isFamilyTyCon lhsTc
   , isFamilyTyCon rhsTc
-  = do { do API.tcPluginTrace "--Plugin obviously not equal--" (ppr ct)
+  = do { do API.tcPluginTrace "--Plugin obviously not equal TyFam--" (ppr ct)
        ; error_predTy <- API.mkTcPluginErrorTy (mkTyFamNotEqError lhsTy rhsTy)
        ; nw_error <- API.newWanted (API.ctLoc ct) error_predTy
        ; return $ acc <> ([], [], [API.mkNonCanonical nw_error])
        }
 
+  -- We want to reject equalities between labels that are not equal
+  | predTy <- API.ctPred ct
+  , isEqPrimPred predTy
+  , Just (_tc, [_, _, lhsTy, rhsTy]) <- API.splitTyConApp_maybe predTy
+  , Nothing <- API.splitTyConApp_maybe lhsTy
+  , Nothing <- API.splitTyConApp_maybe rhsTy
+  , not (API.isTyVarTy lhsTy)
+  , not (API.isTyVarTy rhsTy)
+  , not $ API.eqType lhsTy rhsTy
+  = do { do API.tcPluginTrace "--Plugin obviously not equal groundType--" (ppr ct)
+       ; error_predTy <- API.mkTcPluginErrorTy (mkTyFamNotEqError lhsTy rhsTy)
+       ; nw_error <- API.newWanted (API.ctLoc ct) error_predTy
+       ; return $ acc <> ([], [], [API.mkNonCanonical nw_error])
+       }
+
+  | predTy <- API.ctPred ct
+  , isEqPrimPred predTy
+  , Just (_tc, ([_, _, lhsTy, rhsTy])) <- API.splitTyConApp_maybe predTy
+  , Just (_r_tycon1, [kx, assocs_x]) <- API.splitTyConApp_maybe lhsTy
+  , Just (_r_tycon2, [ky, assocs_y]) <- API.splitTyConApp_maybe rhsTy
+  , let xs = unfold_list_type_elems assocs_x
+  , let ys = unfold_list_type_elems assocs_y
+  , API.eqType kx ky || length xs /= length ys -- we are not having hetrogenous row concat
+  , _r_tycon1 == _r_tycon2
+  = do { do API.tcPluginTrace "--Plugin obviously not equal R TypeFams--" (ppr ct)
+       ; error_predTy <- API.mkTcPluginErrorTy (mkTyFamNotEqError lhsTy rhsTy)
+       ; nw_error <- API.newWanted (API.ctLoc ct) error_predTy
+       ; return $ acc <> ([], [], [API.mkNonCanonical nw_error])
+       }
+
+
   -- missing cases: Plus x y z ||- x ~<~ z, y ~<~ z
   -- ANI: I suspect that we shouldn't need this as the super class constraints on the type class Plus
   --      will generate the consequents as wanted constraints?
   --      store x ~<~ z and y ~<~ z in the Plus x y z dictonary
-
 
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
@@ -527,7 +560,7 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
          else do { API.tcPluginTrace "--Plugin Throw error RowConcatRewrite (~+~)--" (vcat [ text "a:" <+> ppr assocs_a
                                                                                            , text "b:" <+> ppr assocs_b
                                                                                            , text "inter" <+> ppr inter])
-                 ; throwTypeError redn (mkSameLableError a b inter) }
+                 ; throwTypeError redn (mkSameLabelError a b inter) }
        }
   | otherwise
   = do API.tcPluginTrace "--Plugin Cannot Reduce TyFam (~+~)--" (ppr tys)
@@ -616,8 +649,8 @@ throwTypeError badRedn msg = do
 
 
 -- | Make the error message to be raised when two rows cannot be concatinated
-mkSameLableError :: Type -> Type -> [Type] -> TcPluginErrorMessage
-mkSameLableError r1 r2 common = Txt "Cannot concat rows"
+mkSameLabelError :: Type -> Type -> [Type] -> TcPluginErrorMessage
+mkSameLabelError r1 r2 common = Txt "Cannot concat rows"
                          :-: (PrintType r1)
                          :-: (Txt " with ")
                          :-: (PrintType r2)
@@ -626,11 +659,7 @@ mkSameLableError r1 r2 common = Txt "Cannot concat rows"
 
 mkTyFamNotEqError :: Type -> Type -> TcPluginErrorMessage
 mkTyFamNotEqError ty1 ty2
-  | Just (tc1, _) <- splitTyConApp_maybe ty1
-  , Just (tc2, _) <- splitTyConApp_maybe ty2
-  , tc1 /= tc2
   = Txt "Cannot Unify"
   :-: (PrintType ty1)
   :-: (Txt " with ")
   :-: (PrintType ty2)
-  | otherwise = API.pprPanic "mkTyFamNotEqError shouldn't happen" (ppr ty1 $$ ppr ty2)

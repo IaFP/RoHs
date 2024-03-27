@@ -136,13 +136,11 @@ library
 
 test-suite RoHs-test
     -- Import common warning flags.
-    import:           ghcopts
+    ghc-options:           -Wall -dcore-lint
+                           -- -fplugin RoHs.Plugin
 
     -- Base language which the package is written in.
     default-language: GHC2021
-
-    -- Modules included in this executable, other than Main.
-    -- other-modules: IllTyped.RowConcat
 
     -- LANGUAGE extensions used by modules in this package.
     other-extensions: DataKinds, ConstraintKinds, TypeApplications, ImpredicativeTypes, TypeFamilyDependencies

@@ -66,7 +66,7 @@ default (Int)
 labR0   :: forall s {t}. t -> R0 (R '[s := t])
 unlabR0 :: forall s {t}. R0 (R '[s := t]) -> t
 prj0    :: forall y z. y ~<~ z => R0 z -> R0 y
-cat0    :: forall {x} {y} {z}. Plus x y z => R0 x -> R0 y -> R0 z
+cat0    :: forall {x} {y} {z}. (Plus x y z) => R0 x -> R0 y -> R0 z
 labV0   :: forall s {t}. t -> V0 (R '[s := t])
 brn0    :: Plus x y z => (V0 x -> t) -> (V0 y -> t) -> V0 z -> t
 unlabV0 :: forall s {t}. V0 (R '[s := t]) -> t

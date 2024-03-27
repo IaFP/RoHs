@@ -27,20 +27,20 @@ type family (~+~) (a :: Row t) (b :: Row t) = (c :: Row t)
 -- But that's more than just an injective type family.  We can make more
 -- progress using the following definition:
 
-class (x ~<~ z, y ~<~ z) => Plus (x :: Row t) (y :: Row t) (z :: Row t)
+class (x ~<~ z, y ~<~ z, z ~ x ~+~ y) => Plus (x :: Row t) (y :: Row t) (z :: Row t)
    | x y -> z,
      x z -> y,
      y z -> x
 
 
 -- Records ahoy
-type family R0 :: Row Type -> Type where -- how do the terms which inhabit this type look like
-type family R1 :: Row (a -> Type) -> a -> Type where -- term level re
+type family R0 (r :: Row Type) = (q :: Type) | q -> r where -- how do the terms which inhabit this type look like
+type family R1 (r :: Row (a -> Type)) = (q :: a -> Type) | q -> r where -- term level re
 
 
 -- Let's repeat the tedium for variants...
 type family V0 (r :: Row Type) = (v :: Type) | v -> r where
-type family V1 :: Row (a -> Type) -> a -> Type where
+type family V1 (r :: Row (a -> Type)) = (v :: a -> Type) | v -> r where
 
 
 -- Okay, let's try Rω again.  Same fundamental problem: we need to replace the use of type-level λs.
