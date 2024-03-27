@@ -6,7 +6,7 @@
 {-# OPTIONS -fforce-recomp -fplugin RoHs.Plugin #-}
 
 
-module IllTyped.RowConcat (main) where
+module RowConcat (main) where
 
 import RoHs.Language.Lib
 
@@ -26,4 +26,4 @@ curried_lables y = s1 `cat0` y
 -- should_fail = curried_lables `cat0` s2
 
 main :: IO ()
-main = putStrLn "should get printed"
+main = putStrLn "should not get printed"

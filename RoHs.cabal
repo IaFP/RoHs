@@ -99,39 +99,54 @@ library
     -- Base language which the package is written in.
     default-language: GHC2021
 
--- executable RoHs-exe
---     import:           ghcopts
+executable RoHs-test-exe
+    import:           ghcopts
 
---     other-modules:      RoHs.Examples.Basic
---                         RoHs.Language.Lib
---                         RoHs.Language.Primitives
---                         RoHs.Language.Types
-
---                         RoHs.Plugin
---                         RoHs.Plugin.Core
---                         RoHs.Plugin.CoreUtils
---                         RoHs.Plugin.Semantics
---                         RoHs.Plugin.Source
---                         RoHs.Plugin.TC
+    -- other-modules:
 
 
---     build-depends:    base ^>=4.18,
---                       ghc >=9.6.2,
---                       ghc-tcplugin-api ^>= 0.11.0.0,
---                       mtl ^>= 2.3,
---                       ghc-tcplugins-extra ^>= 0.4.5,
---                       syb ^>= 0.7,
---                       containers,
---                       RoHs
---     -- Directories containing source files.
---     hs-source-dirs:   src
+    build-depends:    base ^>=4.18,
+                      ghc >=9.6.2,
+                      ghc-tcplugin-api ^>= 0.11.0.0,
+                      mtl ^>= 2.3,
+                      ghc-tcplugins-extra ^>= 0.4.5,
+                      syb ^>= 0.7,
+                      containers,
+                      RoHs
+    -- Directories containing source files.
+    hs-source-dirs:   test/IllTyped
 
---     main-is: Main.hs
+    main-is: Unlab.hs
 
---     -- Base language which the package is written in.
---     default-language: GHC2021
+    -- Base language which the package is written in.
+    default-language: GHC2021
 
---     other-extensions: DataKinds, ConstraintKinds, TypeApplications, ImpredicativeTypes, TypeFamilyDependencies
+    other-extensions: DataKinds, ConstraintKinds, TypeApplications, ImpredicativeTypes, TypeFamilyDependencies
+
+executable RoHs-test-exe2
+    import:           ghcopts
+
+    -- other-modules:
+
+
+    build-depends:    base ^>=4.18,
+                      ghc >=9.6.2,
+                      ghc-tcplugin-api ^>= 0.11.0.0,
+                      mtl ^>= 2.3,
+                      ghc-tcplugins-extra ^>= 0.4.5,
+                      syb ^>= 0.7,
+                      containers,
+                      RoHs
+    -- Directories containing source files.
+    hs-source-dirs:   test/IllTyped
+
+    main-is: RowConcat.hs
+
+    -- Base language which the package is written in.
+    default-language: GHC2021
+
+    other-extensions: DataKinds, ConstraintKinds, TypeApplications, ImpredicativeTypes, TypeFamilyDependencies
+
 
 
 test-suite RoHs-test
@@ -169,6 +184,7 @@ test-suite RoHs-test
         tasty-quickcheck,
         tasty-expected-failure,
         tasty-hspec,
+        tasty-program,
 
         mtl ^>= 2.3,
         containers,

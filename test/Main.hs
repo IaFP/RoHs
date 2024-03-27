@@ -4,11 +4,10 @@
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
 
-
 -- Make sure you have `cabal configure --enable-tests` before running this
 -- {-# OPTIONS -fforce-recomp -ddump-ds -ddump-simpl -dsuppress-module-prefixes -dsuppress-idinfo -dsuppress-coercions -fplugin RoHs.Plugin #-}
 
-{-# OPTIONS  -fforce-recomp -ddump-tc-trace -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -fplugin RoHs.Plugin #-}
 
 module Main where
 
@@ -18,7 +17,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.ExpectedFailure
 import Test.Tasty.SmallCheck as SC
--- import Test.Tasty.QuickCheck as QC
+import Test.Tasty.Program as P
 
 
 main :: IO (())
@@ -71,6 +70,6 @@ units = testGroup "Unit Testsuite"
 
 fails :: TestTree
 fails = testGroup "Fail Testsuite"
-  [ testCase "Same label error" $
-        (@?=) @Int (unlabR0 @"x" (prj0 $ rec1 `cat0` rec1)) 1
+  [  P.testProgram "IllTyped.Unlab"     "cabal" ["run", "RoHs-test-exe"] Nothing
+  ,  P.testProgram "IllTyped.RowConcat" "cabal" ["run", "RoHs-test-exe2"] Nothing
   ]

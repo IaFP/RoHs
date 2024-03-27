@@ -3,10 +3,10 @@
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
-{-# OPTIONS -ddump-tc-trace -fforce-recomp -fplugin RoHs.Plugin #-}
+{-# OPTIONS -fforce-recomp -fplugin RoHs.Plugin #-}
 
 
-module IllTyped.RowConcat (main) where
+module Unlab where
 
 import RoHs.Language.Lib
 
@@ -15,3 +15,6 @@ s1 = labR0 @"x" (1::Int)
 
 
 err = unlabR0 @"y" s1 -- type error
+
+main :: IO ()
+main = putStrLn "should fail"
