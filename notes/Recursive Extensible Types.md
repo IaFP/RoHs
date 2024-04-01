@@ -83,6 +83,7 @@ $$
 \mathrm{idx} \, (\mathrm {In} \, e) &= \mathrm{In} \, (\mathrm{ana} \, (\lambda \, l \, x. \, \mathrm{con} \, l \, (\mathrm{idx} \, x)) \, e)
 \end{aligned}
 $$
+
 However, it is not so immediately obvious how to write this in RoHs. In particular, in Haskell, the only version of `ana` that has made a lot of sense so far is the version that abstracts over a type class constraint for each constructor. Here we really don't need such a thing...
 
 # The tedious solution
