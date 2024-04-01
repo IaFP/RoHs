@@ -33,20 +33,6 @@ rec2 :: R0 (R '["y" := Bool])
 rec2 = labR0 @"y" (True::Bool)
 
 
--- Same labels should give an error
--- same_labels :: R0 (R '["x" := Int] ~+~ (R '["x" := Bool]))
--- same_labels = s1 `cat0` s2
-
--- curried_labs :: forall z.  R0 z -> R0 (R '["x" := Int] ~+~ z)
--- curried_labs y = s1 `cat0` y
-
--- should_fail = curried_lables s3
-
--- row_int_bool :: R0 (R '["x" := Int, "y" := Bool])
--- row_int_bool = s1 `cat0` s3
-
-
-
 properties :: TestTree
 properties = testGroup "Properties Testsuite"
   [ SC.testProperty "unlabR0 . labR0 = id" $
@@ -70,6 +56,6 @@ units = testGroup "Unit Testsuite"
 
 fails :: TestTree
 fails = testGroup "Fail Testsuite"
-  [  P.testProgram "IllTyped.Unlab"     "cabal" ["run", "RoHs-test-exe"] Nothing
-  ,  P.testProgram "IllTyped.RowConcat" "cabal" ["run", "RoHs-test-exe2"] Nothing
+  [  P.testProgram "IllTyped.Unlab"     "cabal" ["run", "RoHs-test-illtype-unlab"] Nothing
+  ,  P.testProgram "IllTyped.RowConcat" "cabal" ["run", "RoHs-test-illtype-rowconcat"] Nothing
   ]

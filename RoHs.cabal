@@ -122,7 +122,7 @@ executable RoHs-sample-exe
     other-extensions: DataKinds, ConstraintKinds, TypeApplications, ImpredicativeTypes, TypeFamilyDependencies
 
 
-executable RoHs-test-exe
+executable RoHs-test-illtype-unlab
     import:           ghcopts
 
     -- other-modules:
@@ -146,7 +146,7 @@ executable RoHs-test-exe
 
     other-extensions: DataKinds, ConstraintKinds, TypeApplications, ImpredicativeTypes, TypeFamilyDependencies
 
-executable RoHs-test-exe2
+executable RoHs-test-illtype-rowconcat
     import:           ghcopts
 
     -- other-modules:
