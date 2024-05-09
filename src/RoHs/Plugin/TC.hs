@@ -448,7 +448,9 @@ solve_trivial PluginDefs{..} _ acc ct
 
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
-                   return $ acc <> ([], [ct], [])
+                   if (isEqPrimPred $ API.ctPred ct)
+                   then return $ acc <> ([], [ct], [])
+                   else return $ acc
 
 
 unzipAssocList :: API.TcType -> Maybe ([API.TcType], [API.TcType])

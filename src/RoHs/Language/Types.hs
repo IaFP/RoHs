@@ -34,7 +34,7 @@ class (x ~<~ z, y ~<~ z, z ~ x ~+~ y) => Plus (x :: Row t) (y :: Row t) (z :: Ro
 
 
 -- Records ahoy
-type family R0 (r :: Row Type) = (q :: Type) | q -> r where -- how do the terms which inhabit this type look like
+type family R0 (r :: Row Type) = (q :: Type) | q -> r where
 type family R1 (r :: Row (a -> Type)) = (q :: a -> Type) | q -> r where -- term level re
 
 
@@ -54,5 +54,3 @@ type family Each (f :: (a -> b)) (r :: Row a) :: Row b where
   -- -fundep, but that seems hard to use...
 
 class All (cls :: a -> Constraint) (r :: Row a) where
-
--- instance (r ~<~ r', All cls r') => All cls r

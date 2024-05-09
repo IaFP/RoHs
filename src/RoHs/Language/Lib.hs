@@ -17,10 +17,14 @@ module RoHs.Language.Lib (
   , con0
   , sel0
 
+  -- * Records
   , labR0
   , unlabR0
   , prj0
   , cat0
+  , syn0
+
+  -- * Variants
   , labV0
   , brn0
   , unlabV0
@@ -47,7 +51,8 @@ module RoHs.Language.Lib (
 
 {-
 A module for library of operations on rows and variants
-It also exports the Primitives, so users must not explicitly import it
+It also exports the Primitives, so users must not explicitly import that module.
+They should only depend on this module.
 -}
 
 import RoHs.Language.Types
@@ -74,6 +79,9 @@ inj0    :: forall y z. y ~<~ z => V0 y -> V0 z
 anaA0   :: forall c {z} {t}. All c z
         => (forall s y {u}. (Plus (R '[s := u]) y z, R '[s := u] ~<~ z, y ~<~ z, c u) =>  Proxy s -> u -> t)
         -> V0 z -> t
+syn0    :: forall c {z}. All c z
+        => (forall s y {u}. (Plus (R '[s := u]) y z, R '[s := u] ~<~ z, y ~<~ z, c u) =>  Proxy s -> u)
+        -> R0 z
 
 labR0    = labR0_I
 unlabR0  = unlabR0_I
@@ -84,6 +92,7 @@ brn0     = brn0_I
 unlabV0  = unlabV0_I
 inj0     = inj0_I
 anaA0    = anaA0_I
+syn0     = syn0_I
 
 --  Higher Kinded Domains
 

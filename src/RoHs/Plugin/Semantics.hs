@@ -18,6 +18,8 @@ primMap = [ (fsLit "labR0_I" ,   labRCore)    -- :: forall s {t}. t -> R0 (R '[s
           , (fsLit "unlabR0_I",  unlabRCore)  -- :: forall s t. R0 (R '[s := t]) -> t
           , (fsLit "prj0_I",     prjCore)     -- :: forall z y. z ~<~ y => R0 y -> R0 z
           , (fsLit "cat0_I",     catCore)     -- :: forall y z x. Plus y z x => R0 y -> R0 z -> R0 x
+          -- , (fsLit "syn0_I",     undefined)      -- :: (forall s y {u}. All c z
+          --                                     -- => (Plus (R '[s := u]) y z, R '[s := u] ~<~ z, y ~<~ z, c u) => Proxy s -> u) -> R0 z
 
 
           , (fsLit "labV0_I",    labVCore)    -- :: forall s {t}. t -> V0 (R '[s := t])

@@ -6,6 +6,7 @@
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -ddump-tc-trace -fforce-recomp -dcore-lint -ddump-ds -O0 -dasm-lint -dcmm-lint -ddump-asm-native -ddump-exitify -fplugin RoHs.Plugin -fplugin-opt debug #-}
 {-# OPTIONS -dcore-lint -O0 -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS -dcore-lint -O0 -ddump-tc-trace -ddump-simpl -ddump-ds-preopt -dsuppress-module-prefixes -fprint-explicit-kinds -dno-suppress-type-applications -ddump-worker-wrapper -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
 
@@ -149,9 +150,7 @@ injR (Mk e) = Mk (inj1 (fmapV injR e))
 
 -- expressions
 
--- We seem to need type synonyms to be declared in sorted order... need to track
--- down why.
---
+
 type SmallR = R ["Const" := Zero Int, "Add" := Two]
 type BigR   = R ["Double" := One, "Add" := Two, "Const" := Zero Int]
 
@@ -194,19 +193,10 @@ fourS = desugar fourB -- without the type annotation GHC type checker generates 
 
 -- check order compared to paper, paper is wrong
 cases :: (V1 z (Mu (V1 z)) -> (Mu (V1 z) -> r) -> r) -> Mu (V1 z) -> r
-cases f (Mk e) = let x = cases f in f e x
+cases f (Mk e) = f e (cases f)
 
 foldV :: All Functor z => (V1 z r -> r) -> Mu (V1 z) -> r
 foldV f (Mk e) = f (fmapV (foldV f) e)
-
-class MyShow a where
-  myShow :: a -> String
-  myShow2 :: a -> String
-
-instance MyShow Int where
-    myShow _ = "A"
-    myShow2 a = show a
--- showing
 
 showC :: V1 (R '["Const" := Zero Int]) t -> p -> String
 showA :: V1 (R '["Add" := Two]) t -> (t -> String) -> String

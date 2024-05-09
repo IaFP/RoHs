@@ -16,17 +16,11 @@ import Data.Proxy
 -- They primitives are defined as undefined
 -- They will be replaced by the actual
 -- implementation in the core pass using
--- the core plugin
+-- the core plugin.
 
 
--- There are 2 ways of doing this, i'm not sure which path to take:
---   1. Should we replace the bindings and emit a core file which can be linked to the
---      use site correctly? or,
---   2. Should we replace each occurance in the use site should be replaced by the right semantic core
-
-
--- For now i'm chosing option 2 as I suspect their may be information that i can leverage
--- to manipulate the dictonaries.
+-- The client should not import this file.
+-- They should depend on the `RoHs.Language.Lib` module
 
 
 -- Well this is potentially annoying...
@@ -46,6 +40,15 @@ prj0_I = undefined
 -- cat0 :: R0 y -> R0 z -> R0 (y ~+~ z)
 cat0_I :: forall {x} {y} {z}. Plus x y z => R0 x -> R0 y -> R0 z
 cat0_I = undefined
+
+
+syn0_I :: forall c {z} {u}.
+         All c z =>
+         (forall {s} {y} {u}. (Plus (R '[s := u]) y z, R '[s := u] ~<~ z, y ~<~ z, c u)
+                            =>  Proxy s -> u)
+      -> R0 z
+syn0_I = undefined  -- We don't know how to make this work yet.
+                   -- JGM says The types don't work out in Haskell. Need to check where exactly it fails
 
 -- {-# OPAQUE labV0_I #-}
 labV0_I :: forall s {t}. t -> V0 (R '[s := t])
