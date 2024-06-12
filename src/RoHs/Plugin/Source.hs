@@ -6,10 +6,10 @@ import           GHC.Plugins            as GHC
 import           GHC.Tc.Utils.Monad (traceRn)
 import           GHC.Tc.Plugin          as GHC
 import           GHC.Tc.Types
-
+import           GHC.Hs.Utils
+import GHC.Utils.Outputable
 import Data.Generics.Aliases
 import Data.Generics.Schemes
-
 import Control.Monad.Writer
 
 -- TODO: maybe less copy and paste?
@@ -68,8 +68,8 @@ xformT names t =
      else -- We encountered a type without quantifiers... so I'll try converting
           -- it to a qualified type, but I'm not 100% sure how this will work
           -- out...
-          do let t'' = L loc (HsQualTy NoExtField (L (SrcSpanAnn EpAnnNotUsed srcSpan) preds) t')
-             traceRn "3 adding predicates to type (no quantifiers):" (cat [ppr t, text " ==> ", ppr t''])
+          do let t'' = L loc (HsQualTy NoExtField (L (SrcSpanAnn EpAnnNotUsed srcSpan) (uniquePlusPreds preds)) t')
+             traceRn "3 adding predicates to type (no quantifiers):" (cat [ppr preds, ppr (uniquePlusPreds preds), ppr t, text " ==> ", ppr t''])
              return t''
 
 type CollectM = WriterT (HsContext GhcRn) TcM
@@ -88,6 +88,14 @@ isRowLiteral names (L _ (HsAppTy _ (L _ (HsTyVar _ _ (L _ vname))) (L _ (HsExpli
 isRowLiteral names (L _ (HsParTy _ ty)) = isRowLiteral names ty -- are there more cases like this?!
 isRowLiteral _ _ = False
 
+uniquePlusPreds :: [LHsType GhcRn] -> [LHsType GhcRn]
+uniquePlusPreds preds = unique_preds preds []
+  where unique_preds [] acc = acc
+        unique_preds (p:ps) acc = if any (cmpPred p) acc
+                                     then unique_preds ps acc
+                                     else unique_preds ps (p:acc)
+        cmpPred p p' = showSDocUnsafe (ppr p) == showSDocUnsafe (ppr p') -- lawl
+
 collect :: Names -> LHsType GhcRn -> CollectM (LHsType GhcRn)
 collect names = collectL where
 
@@ -101,14 +109,9 @@ collect names = collectL where
     HsQualTy NoExtField <$> collectC ctxt <*> collectL body
   collectT t@(HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L _ (HsTyVar _ NotPromoted (L nameLoc name))) lhs)) rhs)
     | name == plusTyCon names && (not (isRowLiteral names lhs) || not (isRowLiteral names rhs)) =
-      do let p = L srcloc (HsAppTy NoExtField   -- lying about source location here
-                           (L srcloc
-                            (HsAppTy NoExtField (L srcloc
-                                                  (HsAppTy NoExtField
-                                                   (L srcloc
-                                                     (HsTyVar EpAnnNotUsed NotPromoted
-                                                       (L nameLoc (plusPredCon names)))) lhs)) rhs)) (L srcloc t))
-
+      do let
+           plusConTy = L srcloc (HsTyVar EpAnnNotUsed NotPromoted (L nameLoc (plusPredCon names)))
+           p = foldl mkHsAppTy plusConTy [lhs, rhs, L srcloc t]
          lift (traceRn ("1 At " ++ showSDocUnsafe (ppr srcloc) ++ " found use of ~+~:") (ppr t))
          tell [p]
          return t
@@ -128,8 +131,12 @@ collect names = collectL where
   collectT (HsSumTy ext ts) =   -- Btw, what is this?
     HsSumTy ext <$> mapM collectL ts
   collectT t@(HsOpTy _ NotPromoted lhs@(L srcloc _) (L nameloc name) rhs)
+    --  lhs ~+~ rhs ~~~> Plus lhs rhs (lhs ~+~ rhs)
     | name == plusTyCon names && (not (isRowLiteral names lhs) || not (isRowLiteral names rhs)) =
-      do let p = L srcloc (HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L srcloc (HsTyVar EpAnnNotUsed NotPromoted (L nameloc (plusPredCon names)))) lhs)) rhs)) (L srcloc t)) -- lying about source location here
+      do let
+           plusConTy = L srcloc (HsTyVar EpAnnNotUsed NotPromoted (L nameloc (plusPredCon names)))
+           p = foldl mkHsAppTy plusConTy [lhs, rhs, L srcloc t]
+
          lift (traceRn "2 Emitting constraint" (ppr p))
          tell [p]
          return t
