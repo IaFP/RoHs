@@ -27,7 +27,7 @@ type family (~+~) (a :: Row t) (b :: Row t) = (c :: Row t)
 -- But that's more than just an injective type family.  We can make more
 -- progress using the following definition:
 
-class (x ~<~ z, y ~<~ z, z ~ x ~+~ y) => Plus (x :: Row t) (y :: Row t) (z :: Row t)
+class (x ~<~ z, y ~<~ z) => Plus (x :: Row t) (y :: Row t) (z :: Row t)
    | x y -> z,
      x z -> y,
      y z -> x
@@ -53,4 +53,4 @@ type family Each (f :: (a -> b)) (r :: Row a) :: Row b where
   -- Perhaps I could solve this problem by switching `Each` to a constraint-with
   -- -fundep, but that seems hard to use...
 
-class All (cls :: a -> Constraint) (r :: Row a) where
+class All (cls :: a -> Constraint) (r :: Row a)

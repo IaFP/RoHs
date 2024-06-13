@@ -6,8 +6,7 @@ import           GHC.Plugins            as GHC
 import           GHC.Tc.Utils.Monad (traceRn)
 import           GHC.Tc.Plugin          as GHC
 import           GHC.Tc.Types
-import           GHC.Hs.Utils
-import GHC.Utils.Outputable
+
 import Data.Generics.Aliases
 import Data.Generics.Schemes
 import Control.Monad.Writer

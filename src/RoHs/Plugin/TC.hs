@@ -201,15 +201,16 @@ solve_trivial PluginDefs{..} _ acc ct
   , let ys = sortAssocs $ setDiff xs zs
   , let rowAssocKi = mkTyConApp rowAssocTyCon [k]
   , let y0 = API.mkTyConApp r_tycon [k,  mkPromotedListTy rowAssocKi ys]
-  , Just ps <- checkConcatEv xs ys zs
+  , isJust $ checkConcatEv xs ys zs
   = do { API.tcPluginTrace "--Plugin solving improvement for Plus with Eq emit --" (vcat [ ppr predTy ])
        ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--"
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
-       ; nw <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
+       ; nw_dict <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
        ; new_eq_wanted <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
+       ; new_dict_eq <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal predTy (API.substType [(yTVar, y0)] predTy)
        ; return $ acc <> ([]
                              -- [(mkPlusEvTerm ps predTy, ct)]
-                         , API.mkNonCanonical <$> [nw, new_eq_wanted]
+                         , API.mkNonCanonical <$> [nw_dict, new_eq_wanted, new_dict_eq]
                          , []
                          )
        }
@@ -230,7 +231,7 @@ solve_trivial PluginDefs{..} _ acc ct
   -- y is just a type variable which we will solve for
   , isJust (checkSubsetEv xs zs)
   , let ys = sortAssocs $ setDiff xs zs
-  , Just ps <- checkConcatEv xs ys zs
+  , isJust $ checkConcatEv xs ys zs
   = do { API.tcPluginTrace "--Plugin solving improvement for Plus with Eq emit --" (vcat [ ppr predTy ])
        ; let
              rowAssocKi = mkTyConApp rowAssocTyCon [k]
@@ -294,9 +295,8 @@ solve_trivial PluginDefs{..} _ acc ct
         ; if null inter
           then do { nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy zTVar) z0
                   ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
-                  ; API.tcPluginTrace "Generated new ct" (ppr nw)
                   ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--"
-                    (text "computed" <+> ppr zTVar <+> text "=:=" <+> ppr z0)
+                    (text "computed [w]" <+> ppr zTVar <+> text "=:=" <+> ppr z0)
                   ; return $ acc <> ([]
                           , [API.mkNonCanonical nw], [])
                   }
@@ -366,7 +366,7 @@ solve_trivial PluginDefs{..} _ acc ct
              y0 = API.mkTyConApp rTF [k,  mkPromotedListTy rowAssocKi diff]
        ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--" (text "computed" <+> ppr yTVar <+> text "=:=" <+> ppr y0)
        ; nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
-       ; return $ acc <> ([(API.evCoercion (mkCoercion API.Nominal y y0), ct)]
+       ; return $ acc <> ([] -- [(API.evCoercion (mkCoercion API.Nominal y y0), ct)]
                          , [API.mkNonCanonical nw]
                          , []
                          )
@@ -386,7 +386,7 @@ solve_trivial PluginDefs{..} _ acc ct
   , API.eqType kr kl
   , length rs == length ls
   , eqs <- makeEqFromAssocs rs ls
-  = do { API.tcPluginTrace "--Plugin Eq RTF--" (vcat [ppr _tcL , ppr rs, ppr _tcR, ppr ls])
+  = do { API.tcPluginTrace "--Plugin Eq RTF--" (vcat [ppr rs, ppr ls])
        ; nws <- mapM (\(lhsTy', rhsTy') ->
                         API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal lhsTy' rhsTy')
                   eqs
@@ -440,17 +440,14 @@ solve_trivial PluginDefs{..} _ acc ct
        ; return $ acc <> ([], [], [API.mkNonCanonical nw_error])
        }
 
-
-  -- missing cases: Plus x y z ||- x ~<~ z, y ~<~ z
+-- missing cases: Plus x y z ||- x ~<~ z, y ~<~ z
   -- ANI: I suspect that we shouldn't need this as the super class constraints on the type class Plus
   --      will generate the consequents as wanted constraints?
   --      store x ~<~ z and y ~<~ z in the Plus x y z dictonary
 
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
-                   if (isEqPrimPred $ API.ctPred ct)
-                   then return $ acc <> ([], [ct], [])
-                   else return $ acc
+                   return $ acc
 
 
 unzipAssocList :: API.TcType -> Maybe ([API.TcType], [API.TcType])

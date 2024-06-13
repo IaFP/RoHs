@@ -6,7 +6,7 @@
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -ddump-tc-trace -fforce-recomp -dcore-lint -ddump-ds -O0 -dasm-lint -dcmm-lint -ddump-asm-native -ddump-exitify -fplugin RoHs.Plugin -fplugin-opt debug #-}
 {-# OPTIONS -dcore-lint -O0 -fplugin RoHs.Plugin #-}
--- {-# OPTIONS -dcore-lint -O0 -ddump-tc-trace -ddump-simpl -ddump-ds-preopt -dsuppress-module-prefixes -fprint-explicit-kinds -dno-suppress-type-applications -ddump-worker-wrapper -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS -ddump-rn-trace -dcore-lint -O0 -ddump-tc-trace -ddump-simpl -ddump-ds-preopt -dverbose-core2core -dsuppress-module-prefixes -dno-suppress-type-applications -fplugin RoHs.Plugin #-}
 
 module RoHs.Examples.Basic where
 
@@ -186,8 +186,8 @@ fourB :: Mu (V1 BigR)
 fourB = mkD (mkC 2)
 
 
-fourS :: Mu (V1 SmallR)
-fourS = desugar fourB -- without the type annotation GHC type checker generates a weird core which doesn't core-lint
+-- fourS :: Mu (V1 SmallR)
+fourS = desugar fourB
 
 -- folds
 
