@@ -167,6 +167,11 @@ try_solving defs acc@(solved, unsolveds, _) givens wanteds =
 --                            3. (x := t) ~<~ [x := t , y := u]
 solve_trivial :: PluginDefs -> [API.Ct] -> PluginWork -> API.Ct -> API.TcPluginM API.Solve PluginWork
 solve_trivial PluginDefs{..} _ acc ct
+{-
+      r1 U r2 = r3    r1 n r2 = 𝝓
+  ---------------------------------
+    𝚪 |= Plus (R r1) (R r2) (R r3)
+-}
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowPlusCls
@@ -178,16 +183,29 @@ solve_trivial PluginDefs{..} _ acc ct
   , let ys = unfold_list_type_elems assocs_y
   , let zs = unfold_list_type_elems assocs_z
   , length xs + length ys == length zs
+  , let inter = setIntersect xs ys
   , Just ps <- checkConcatEv xs ys zs
-  = do { API.tcPluginTrace "--Plugin solving Plus construct evidence for z--"
-                              (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr z_s, ppr zs, ppr ps ])
-       ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
-       ; return $ acc <> ([(mkPlusEvTerm ps predTy, ct)], [], [])
-       }
+  = if null inter
+    then
+      do { API.tcPluginTrace "--Plugin solving Plus construct evidence for z--"
+           (vcat [ ppr clsCon, ppr x_s, ppr xs, ppr y_s, ppr ys, ppr z_s, ppr zs, ppr ps ])
+         ; API.tcPluginTrace "Generated evidence" (ppr (mkPlusEvTerm ps predTy))
+         ; return $ acc <> ([(mkPlusEvTerm ps predTy, ct)], [], [])
+         }
+      else do { API.tcPluginTrace "--Plugin overlapping rows--" (ppr ct)
+              ; error_predTy <- API.mkTcPluginErrorTy (mkSameLabelError x y inter)
+              ; nw_error <- API.newWanted (API.ctLoc ct) error_predTy
+              ; return $ acc <> ([], [], [API.mkNonCanonical nw_error])
+              }
 
   -- handles the case such where we have [W] Plus ([x := t]) (y0) ([x := t, y := u])
   -- due to functional dependency we _know_ that y0 is unique we can
   -- then emit that Plus is solvable, and (y0 ~ y := u)
+{-
+           r2 = r3 \ r1
+  ---------------------------------
+    𝚪 |= Plus (R r1) (R r2) (R r3)
+-}
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowPlusCls
@@ -205,12 +223,9 @@ solve_trivial PluginDefs{..} _ acc ct
   = do { API.tcPluginTrace "--Plugin solving improvement for Plus with Eq emit --" (vcat [ ppr predTy ])
        ; API.tcPluginTrace "--Plugin solving Plus construct evidence for y--"
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
-       ; nw_dict <- API.newWanted (API.ctLoc ct) $ API.substType [(yTVar, y0)] predTy
        ; new_eq_wanted <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
-       ; new_dict_eq <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal predTy (API.substType [(yTVar, y0)] predTy)
-       ; return $ acc <> ([]
-                             -- [(mkPlusEvTerm ps predTy, ct)]
-                         , API.mkNonCanonical <$> [nw_dict, new_eq_wanted, new_dict_eq]
+       ; return $ acc <> ( []
+                         , API.mkNonCanonical <$> [new_eq_wanted]
                          , []
                          )
        }
@@ -218,6 +233,12 @@ solve_trivial PluginDefs{..} _ acc ct
   -- technically this is solvable by swapping x and y from the previous case, but i'm afraid
   -- I'll make the plugin solver go another round and round which would be generating unnecessary extra
   -- constraints.
+{-
+           r1 = r3 \ r2
+  ---------------------------------
+    𝚪 |= Plus (R r1) (R r2) (R r3)
+-}
+
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, y, x, z])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowPlusCls
@@ -239,9 +260,8 @@ solve_trivial PluginDefs{..} _ acc ct
        ; API.tcPluginTrace "--Plugin solving Plus construct evidence for x--"
                       (vcat [ ppr clsCon, ppr x, ppr z, ppr y, ppr ys, text "computed" <+> ppr y <+> text "=:=" <+> ppr y0])
        ; nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
-       ; return $ acc <> ([ -- ( mkPlusEvTerm ps predTy, ct)
-                          ]
-                         , [API.mkNonCanonical nw] -- no new wanteds
+       ; return $ acc <> ([]
+                         , [API.mkNonCanonical nw]
                          , []
                          )
        }
@@ -274,6 +294,12 @@ solve_trivial PluginDefs{..} _ acc ct
   --       }
 
   -- Handles the case where z is unknown, but we know x = R '[ .. ] and y = R '[ .. ] in [W] Plus x y z
+{-
+      r3 = r1 U r2   r1 n r2 = 𝝓
+  ---------------------------------
+    𝚪 |= Plus (R r1) (R r2) (R r3)
+-}
+
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, x, y, z])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowPlusCls
@@ -298,7 +324,8 @@ solve_trivial PluginDefs{..} _ acc ct
                   ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--"
                     (text "computed [w]" <+> ppr zTVar <+> text "=:=" <+> ppr z0)
                   ; return $ acc <> ([]
-                          , [API.mkNonCanonical nw], [])
+                                    , [API.mkNonCanonical nw]
+                                    , [])
                   }
           else do { API.tcPluginTrace "--Plugin overlapping rows--" (ppr ct)
                   ; error_predTy <- API.mkTcPluginErrorTy (mkSameLabelError x y inter)
@@ -307,6 +334,11 @@ solve_trivial PluginDefs{..} _ acc ct
                   }
         }
 
+{-
+
+  ---------------------------------
+             𝚪 |= x ~<~ x
+-}
 
   --  Handles the case of x ~<~ x
   | predTy <- API.ctPred ct
@@ -317,6 +349,12 @@ solve_trivial PluginDefs{..} _ acc ct
                                                                              , ppr x , ppr y ])
        ; return $ acc <> ([(mkReflEvTerm predTy, ct)], [], []) }
 
+
+{-
+                   x ⊆ y
+  ---------------------------------
+             𝚪 |= R x ~<~ R y
+-}
 
   -- Handles the case of [(x := t)] ~<~ [(x := t), (y := u)]
   -- with the case where y0 ~<~ z0 but we have a substitution which makes it true
@@ -335,6 +373,12 @@ solve_trivial PluginDefs{..} _ acc ct
 
 
   -- Solving for All constraints
+{-
+        ∀  x ∈ r. 𝚪 |= C x
+  -----------------------------
+        𝚪 |= All C (R r)
+-}
+
   | predTy <- API.ctPred ct
   , Just (clsCon, [_, cls, row]) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon allCls
@@ -350,6 +394,12 @@ solve_trivial PluginDefs{..} _ acc ct
   -- Handles the case where we have [W] (R [x := t] ~+~ r) ~#  (R [x := t, y := u])
   -- This just emits the equality constraint [W] r ~# R [y := u]
   -- This is very specific becuase i want it to be the last resort and not cause the plugin to loop
+{-
+            r = x \ y
+  -------------------------------
+        𝚪 |= (R x ~+~ R r)  ~  R y
+-}
+
   | predTy <- API.ctPred ct
   , isEqPrimPred predTy
   , Just (_tc, [_, _, lhsTy, rhsTy]) <- API.splitTyConApp_maybe predTy
@@ -366,7 +416,7 @@ solve_trivial PluginDefs{..} _ acc ct
              y0 = API.mkTyConApp rTF [k,  mkPromotedListTy rowAssocKi diff]
        ; API.tcPluginTrace "--Plugin solving Type Eq rule (emit equality)--" (text "computed" <+> ppr yTVar <+> text "=:=" <+> ppr y0)
        ; nw <- API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal (mkTyVarTy yTVar) y0
-       ; return $ acc <> ([] -- [(API.evCoercion (mkCoercion API.Nominal y y0), ct)]
+       ; return $ acc <> ( []
                          , [API.mkNonCanonical nw]
                          , []
                          )
@@ -374,6 +424,12 @@ solve_trivial PluginDefs{..} _ acc ct
 
   -- Handles the case where we have [W] (R [x1 := t]) ~#  (R [x2 := t])
   -- This just emits the equality constraint [W] x1 ~# x2
+{-
+        𝚪 |=  x ~ y
+  -------------------------------
+        𝚪 |= R x  ~  R y
+-}
+
   | predTy <- API.ctPred ct
   , isEqPrimPred predTy
   , Just (_, [_, _, lhsTy, rhsTy]) <- API.splitTyConApp_maybe predTy
@@ -395,6 +451,12 @@ solve_trivial PluginDefs{..} _ acc ct
                          , [] )
        }
 
+
+{-
+     𝚪 |= F x  ~  F' y   F /= F'
+  ---------------------------------
+        𝚪 |= contra (F x) (F' y)
+-}
   -- We want to reject equalities between V0 x and V1 y
   | predTy <- API.ctPred ct
   , isEqPrimPred predTy
@@ -411,6 +473,11 @@ solve_trivial PluginDefs{..} _ acc ct
        }
 
   -- We want to reject equalities between labels that are not equal
+{-
+     𝚪 |= (l1 := t) ~ (l2 := t)  l1 /= l2
+  -----------------------------------------
+        𝚪 |= contra (l1 := t) (l2 := t)
+-}
   | predTy <- API.ctPred ct
   , isEqPrimPred predTy
   , Just (_tc, [_, _, lhsTy, rhsTy]) <- API.splitTyConApp_maybe predTy
@@ -425,15 +492,21 @@ solve_trivial PluginDefs{..} _ acc ct
        ; return $ acc <> ([], [], [API.mkNonCanonical nw_error])
        }
 
+{-
+                 r1 /= r2
+  -----------------------------------------
+        𝚪 |= contra (R r1) (R r2)
+-}
   | predTy <- API.ctPred ct
   , isEqPrimPred predTy
-  , Just (_tc, ([_, _, lhsTy, rhsTy])) <- API.splitTyConApp_maybe predTy
+  , Just (_, ([_, _, lhsTy, rhsTy])) <- API.splitTyConApp_maybe predTy
   , Just (_r_tycon1, [kx, assocs_x]) <- API.splitTyConApp_maybe lhsTy
   , Just (_r_tycon2, [ky, assocs_y]) <- API.splitTyConApp_maybe rhsTy
   , let xs = unfold_list_type_elems assocs_x
   , let ys = unfold_list_type_elems assocs_y
-  , API.eqType kx ky || length xs /= length ys -- we are not having hetrogenous row concat
+  , not (API.eqType kx ky) || length xs /= length ys -- we are not having hetrogenous row concat
   , _r_tycon1 == _r_tycon2
+  , _r_tycon1 == rTF
   = do { do API.tcPluginTrace "--Plugin obviously not equal R TypeFams--" (ppr ct)
        ; error_predTy <- API.mkTcPluginErrorTy (mkTyFamNotEqError lhsTy rhsTy)
        ; nw_error <- API.newWanted (API.ctLoc ct) error_predTy

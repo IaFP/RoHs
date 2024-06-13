@@ -47,8 +47,9 @@ type family V1 (r :: Row (a -> Type)) = (v :: a -> Type) | v -> r where
 type family Each (f :: (a -> b)) (r :: Row a) :: Row b where
   -- I have a feeling that this is not going to work out for me... see the
   -- `constants` example below.  The crux of the issue is that I want to
-  -- "axiomatize" `Each f z` with statements like `y ~<~ z => Each f y ~<~ Each
-  -- f z`... but GHC is (reasonably...) upset at constraints on type synonyms.
+  -- "axiomatize" `Each f z` with statements like
+  --             `y ~<~ z => Each f y ~<~ Each f z`
+  -- ... but GHC is (reasonably...) upset at constraints on type synonyms.
   --
   -- Perhaps I could solve this problem by switching `Each` to a constraint-with
   -- -fundep, but that seems hard to use...
