@@ -92,7 +92,7 @@ Okay, fine, here's the beginnings of a Haskell solution, in terms of an explicit
 
 ```haskell
 data t ~> u where
-  Recursive :: (forall y. (z ~<~ y) => z (Mu (V1 y)) -> (Mu (V1 y) -> u) -> u) ->
+  Recursive :: (forall y. (z ~<~ y) => V1 z (Mu (V1 y)) -> (Mu (V1 y) -> u) -> u) ->
                Mu (V1 z) ~> u
 ```
 
