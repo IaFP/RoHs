@@ -128,7 +128,7 @@ tcPluginInit = do
 
 -- The entry point for constraint solving
 tcPluginSolve :: PluginDefs -> [ API.Ct ] -> [ API.Ct ] -> API.TcPluginM API.Solve API.TcPluginSolveResult
-tcPluginSolve _ _ [] = do -- simplify given constraints, we don't have to worry about it yet
+tcPluginSolve _ givens [] = do -- simplify given constraints, we don't have to worry about it yet
   pure $ API.TcPluginOk [] []
 tcPluginSolve defs givens wanteds = do
   API.tcPluginTrace "--tcPluginSolveStart--" (ppr givens $$ ppr wanteds)
@@ -524,7 +524,7 @@ solve_trivial PluginDefs{..} givens acc ct
 {-
 
   ---------------------------------------------------
-    𝚪, V1 x ~ V1 z, x ~<~ xy, xy ~<~ y0 |= z ~<~ y0
+    𝚪, ctEq: V1 x ~ V1 z, ct1: x ~<~ xy, ct2: xy ~<~ y0 |= z ~<~ y0
 -}
   -- Handles the case of transitive reasoning of ~<~
   | predTy <- API.ctPred ct
@@ -539,13 +539,77 @@ solve_trivial PluginDefs{..} givens acc ct
         ; let new_ev = API.evCast (API.ctEvExpr $ API.ctEvidence ct1) (mkCoercion API.Representational (API.ctPred ct1) predTy)
         --  TODO cast ctEvidence with ctEq first.
         ; API.tcPluginTrace "--Plugin solving ~<~ transitive" (vcat [ ppr ct
-                                                                    , text "givens:" <+> ppr givens
                                                                     , ppr zTyVar
                                                                     , ppr y0TyVar
                                                                     , ppr (xy, ct1, ct2) , ppr new_ev
                                                                     ])
 
         ; return $ acc <> ([(new_ev, ct)], [], [])
+        }
+
+
+-- This is now looking like wack a mole
+{-
+
+ ---------------------------------------------------
+    𝚪, V1 x ~ V1 z, x ~<~ y |= z ~<~ y
+-}
+  -- Handles the case of transitive reasoning of ~<~
+  | predTy <- API.ctPred ct
+  , Just (clsCon, ([_, z, y])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowLeqCls
+  , Just zTyVar <- getTyVar_maybe z
+  , Just yTyVar <- getTyVar_maybe y
+  , let ctV1eqs = filter (\c -> case getEqPredTys_maybe (API.ctPred c) of
+                              {Just (_, lhsTy', rhsTy') | Just (tc, [_, l']) <- splitTyConApp_maybe lhsTy'
+                                                        , Just (tc', [_, r']) <- splitTyConApp_maybe rhsTy'
+                                                        , tc == tc', tc == v1TyCon
+                                                        -> API.eqType r' z
+
+                              ; _ -> False})
+                    givens
+  , let ctleqs = filter (\c -> case API.splitTyConApp_maybe (API.ctPred c) of
+                              {Just (tc, [_, x', y']) | tc == API.classTyCon rowLeqCls, isJust $ getTyVar_maybe y'
+                                                      -> API.eqType y' y
+
+                              ; _ -> False})
+                    givens
+
+  =  do { API.tcPluginTrace "--Plugin solving ~<~ transitive simple" (vcat [ ppr ct
+                                                                           , ppr ctV1eqs
+                                                                           , ppr ctleqs
+                                                                           ])
+        ; if not (null ctV1eqs) && not (null ctleqs)
+          then do { let new_ev = API.evCast (API.ctEvExpr $ API.ctEvidence (head ctleqs))
+                                            (mkCoercion API.Representational (API.ctPred (head ctleqs)) predTy)
+                  ; API.tcPluginTrace "" (ppr new_ev)
+                  ; return $ acc <> ([(new_ev, ct)], [], [])
+                  }
+        ; else return $ acc
+        }
+
+
+{-
+
+  ---------------------------
+    𝚪, V1 x ~ V1 z |= x ~ z
+-}
+  -- Handles the case where we get injectivity of V1, apparently it doesn't come for free :(
+  | predTy <- API.ctPred ct
+  , Just (_, lhsTy, rhsTy) <- getEqPredTys_maybe predTy
+  , ctEqs <- filter (\c -> case getEqPredTys_maybe (API.ctPred c) of
+                              {Just (_, lhsTy', rhsTy') | Just (tc, [_, l']) <- splitTyConApp_maybe lhsTy'
+                                                        , Just (tc', [_, r']) <- splitTyConApp_maybe rhsTy'
+                                                        , tc == tc', tc == v1TyCon
+                                                        -> API.eqType l' rhsTy && API.eqType r' lhsTy
+                              ; _ -> False})
+                    givens
+  =  do {
+        --  TODO cast ctEvidence with ctEq first.
+        ; if  null ctEqs
+          then return acc
+          else do { API.tcPluginTrace "--Plugin solving Eq from Given V1" (vcat [ ppr ct, ppr (lhsTy, rhsTy), ppr ctEqs ])
+                  ; return $ acc <> ([(API.mkPluginUnivEvTerm "RoHs.Plugin.TC" API.Nominal lhsTy rhsTy, ct)], [], [])}
         }
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)

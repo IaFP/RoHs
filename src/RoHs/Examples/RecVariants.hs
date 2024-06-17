@@ -37,5 +37,5 @@ brnr (Rec rfv) (Rec rfw) = Rec rfvw
   -- rfw @w :: V1 w (Mu (V1 vw)) -> (Mu (V1 vw) -> u) -> u
   -- brn1 ... :: V1 vw (Mu (V1 vw)) -> (Mu (V1 vw) -> u) -> u
 
--- (~$~) :: (Mu (V1 x) ~> t) -> Mu (V1 x) -> t
--- (Rec f) ~$~ (Mk x) = f x (Rec f ~$~)
+(~$~) :: (Mu (V1 x) ~> t) -> Mu (V1 x) -> t
+(Rec f) ~$~ (Mk x) = f x (Rec f ~$~)
