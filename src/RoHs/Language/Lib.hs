@@ -94,8 +94,6 @@ inj0     = inj0_I
 anaA0    = anaA0_I
 syn0     = syn0_I
 
---  Higher Kinded Domains
-
 -- Things that are definable
 
 con0 :: forall s {t} {z}. R '[s := t] ~<~ z => t -> V0 z
@@ -107,6 +105,8 @@ case0 f = f . unlabV0  -- I am surprised GHC can figure this out... and somewhat
 sel0 :: forall s {t} {z}. R '[s := t] ~<~ z => R0 z -> t
 sel0 r = unlabR0 @s (prj0 r)
 
+
+--  Higher Kinded Domains
 -- Primitives (reimported with a new name from primitives so that plugin can do its magic)
 inj1    :: forall {y} {z} {t}. y ~<~ z => V1 y t -> V1 z t
 labV1   :: forall s {f} {t}. f t -> V1 (R '[s := f]) t
@@ -116,7 +116,8 @@ anaA1   :: forall c {z} {t} {u}.
            (forall s y {f}. (Plus (R '[s := f]) y z, R '[s := f] ~<~ z, y ~<~ z, c f)
                             => Proxy s -> f u -> t)
            -> V1 z u -> t
-brn1 :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
+
+brn1 :: forall x y {z} {t} {u}. Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
 
 inj1    = inj1_I
 labV1   = labV1_I

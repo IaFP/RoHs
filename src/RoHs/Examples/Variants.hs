@@ -12,8 +12,6 @@
 module RoHs.Examples.Variants where
 
 import RoHs.Language.Lib
-import RoHs.Examples.Basic
-
 
 import Data.Proxy
 default (Int)
@@ -26,7 +24,7 @@ data Zero t e = Z t     deriving Functor
 data One e    = O e     deriving Functor
 data Two e    = T e e   deriving Functor
 
-data Mu f     = Mk (f (Mu f))
+newtype Mu f     = Mk (f (Mu f))
 
 instance Show t => Show (Zero t e) where
   show (Z t) =  "Z " ++ show t
@@ -80,6 +78,7 @@ fourB :: Mu (V1 BigR)
 fourB = mkD (mkC 2)
 
 
+
 -- fourS :: Mu (V1 SmallR)
 fourS = desugar fourB
 
@@ -128,7 +127,6 @@ evalB   = cases ((evalA `brn1` evalD) `brn1` evalC)
 
 desugar :: (R '["Add" := Two] ~<~ y, All Functor (R '["Double" := One] ~+~ y)) => Mu (V1 (R '["Double" := One] ~+~ y)) -> Mu (V1 y)
 desugar = foldV (desD `brn1` (Mk . inj1)) where
-  -- desD :: V1 (R '["Double" := One]) (Mu (V1 z)) -> Mu (V1 z)
   desD = case1 @"Double" (\(O e) -> mkA e e)
 
 numFour :: Int
