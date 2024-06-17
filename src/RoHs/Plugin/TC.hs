@@ -64,6 +64,8 @@ data PluginDefs =
     , rTF              :: !API.TyCon -- standin for R
     , rowAssoc         :: !API.TyCon -- standin for :=
     , rowAssocTyCon    :: !API.TyCon -- standin for Assoc
+    , v1TyCon          :: !API.TyCon -- standin for V1
+    , v0TyCon          :: !API.TyCon -- standin for V0
 
     , rowLeqCls        :: !API.Class -- standin for ~<~
     , rowPlusCls       :: !API.Class -- standin for Plus
@@ -104,6 +106,9 @@ tcPluginInit = do
   rowTyCon       <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "Row")
   rowAssoc       <- fmap API.promoteDataCon . API.tcLookupDataCon =<< API.lookupOrig typesModule (API.mkDataOcc ":=")
   rowAssocTyCon  <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "Assoc")
+  v1TyCon        <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "V1")
+  v0TyCon        <- API.tcLookupTyCon =<< API.lookupOrig typesModule (API.mkTcOcc "V0")
+
   rowLeqCls      <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "~<~")
   rowPlusCls     <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "Plus")
   allCls         <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "All")
@@ -113,6 +118,8 @@ tcPluginInit = do
                    , rTF           = rTF
                    , rowAssoc      = rowAssoc
                    , rowAssocTyCon = rowAssocTyCon
+                   , v1TyCon       = v1TyCon
+                   , v0TyCon       = v0TyCon
 
                    , rowPlusCls    = rowPlusCls
                    , rowLeqCls     = rowLeqCls
@@ -166,7 +173,7 @@ try_solving defs acc@(solved, unsolveds, _) givens wanteds =
 --                            2. x ~<~ x
 --                            3. (x := t) ~<~ [x := t , y := u]
 solve_trivial :: PluginDefs -> [API.Ct] -> PluginWork -> API.Ct -> API.TcPluginM API.Solve PluginWork
-solve_trivial PluginDefs{..} _ acc ct
+solve_trivial PluginDefs{..} givens acc ct
 {-
       r1 U r2 = r3    r1 n r2 = 𝝓
   ---------------------------------
@@ -458,6 +465,7 @@ solve_trivial PluginDefs{..} _ acc ct
         𝚪 |= contra (F x) (F' y)
 -}
   -- We want to reject equalities between V0 x and V1 y
+-- TODO: I don't think we should be doing this.
   | predTy <- API.ctPred ct
   , isEqPrimPred predTy
   , Just (_tc, [_, _, lhsTy, rhsTy]) <- API.splitTyConApp_maybe predTy
@@ -513,11 +521,32 @@ solve_trivial PluginDefs{..} _ acc ct
        ; return $ acc <> ([], [], [API.mkNonCanonical nw_error])
        }
 
--- missing cases: Plus x y z ||- x ~<~ z, y ~<~ z
-  -- ANI: I suspect that we shouldn't need this as the super class constraints on the type class Plus
-  --      will generate the consequents as wanted constraints?
-  --      store x ~<~ z and y ~<~ z in the Plus x y z dictonary
+{-
 
+  ---------------------------------------------------
+    𝚪, V1 x ~ V1 z, x ~<~ xy, xy ~<~ y0 |= z ~<~ y0
+-}
+  -- Handles the case of transitive reasoning of ~<~
+  | predTy <- API.ctPred ct
+  , Just (clsCon, ([_, z, y0])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowLeqCls
+  , Just zTyVar <- getTyVar_maybe z
+  , Just y0TyVar <- getTyVar_maybe y0
+  , Just (vTyVar, ctEq) <- findV1EqGiven v1TyCon zTyVar givens
+  , Just (xy, ct1, ct2) <- findLeqGiven (API.classTyCon rowLeqCls) (vTyVar, y0TyVar) givens
+  -- , Just co_zEqv = isCoercionTy_maybe (ctEvidence ctEq)
+  =  do {
+        ; let new_ev = API.evCast (API.ctEvExpr $ API.ctEvidence ct1) (mkCoercion API.Representational (API.ctPred ct1) predTy)
+        --  TODO cast ctEvidence with ctEq first.
+        ; API.tcPluginTrace "--Plugin solving ~<~ transitive" (vcat [ ppr ct
+                                                                    , text "givens:" <+> ppr givens
+                                                                    , ppr zTyVar
+                                                                    , ppr y0TyVar
+                                                                    , ppr (xy, ct1, ct2) , ppr new_ev
+                                                                    ])
+
+        ; return $ acc <> ([(new_ev, ct)], [], [])
+        }
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
                    return $ acc
@@ -706,6 +735,45 @@ sortAssocs = sortBy cmpAssoc
 
 ---- The worlds most efficient set operations above -----
 
+findV1EqGiven :: API.TyCon -> TyVar -> [API.Ct] -> Maybe (TyVar, API.Ct)
+findV1EqGiven v1TyCon zTyVar givens = case filter (matchTyVar v1TyCon zTyVar) givens of
+                                        (ct : _) | Just (_eqTyCon, [_, _, pTy, _]) <- splitTyConApp_maybe (API.ctPred ct)
+                                                 , Just (tc, [_, vTy]) <- splitTyConApp_maybe pTy
+                                                 , tc == v1TyCon
+                                                 , Just vTyVar <- getTyVar_maybe vTy
+                                                 -> Just (vTyVar , ct)
+                                        _    -> Nothing
+   where
+     matchTyVar :: API.TyCon -> TyVar -> API.Ct -> Bool
+     matchTyVar v1TyCon zTyVar c | pTy <- API.ctPred c
+                                 , isEqPrimPred pTy
+                                 , Just (_ , [_, _, _, t1]) <- splitTyConApp_maybe pTy
+                                 , Just (tycon, [_, tyVar]) <- splitTyConApp_maybe t1
+                                 , Just tv <- getTyVar_maybe tyVar
+                                 , tv == zTyVar
+                                 , tycon == v1TyCon
+                                 = True
+                                 | otherwise
+                                 = False
+
+findLeqGiven :: API.TyCon -> (TyVar, TyVar) -> [API.Ct] -> Maybe (TyVar, API.Ct, API.Ct)
+findLeqGiven leqClsTyCon (tvx, tvy) givens | (ct1 : _) <-  filter (matchTyVar leqClsTyCon tvx) givens
+                                           , Just (_, [_, _, t2]) <- splitTyConApp_maybe (API.ctPred ct1)
+                                           , Just tvxy <- getTyVar_maybe t2
+                                           , (ct2 : _) <- filter (matchTyVar leqClsTyCon tvxy) givens
+                                           = Just (tvxy, ct1, ct2)
+                                           | otherwise
+                                           = Nothing
+  where
+    matchTyVar :: API.TyCon -> TyVar -> API.Ct -> Bool
+    matchTyVar leqClsTyCon tv c | pTy <- API.ctPred c
+                                , Just (clsTyCon , [_, t1, _]) <- splitTyConApp_maybe pTy
+                                , clsTyCon == leqClsTyCon
+                                , Just tvvar <- getTyVar_maybe t1
+                                , tvvar == tv
+                                = True
+                                | otherwise
+                                = False
 
 -- Return the given type family reduction, while emitting an additional type error with the given message.
 throwTypeError :: API.Reduction -> API.TcPluginErrorMessage -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult

@@ -27,6 +27,11 @@ The Evidence Story
 
 	All the rows are represented as an appropriate System FC term, as we are implementing the system as a GHC plugin.
 
+	The actual representation of `x ~<~ y` is a tuple `(n, [k_i])`
+	where `n` is the size of `x`, and each `k_i` maps `k`th element of `y` into `x`
+
+
+
 - The row concatenation predicate, represented by the typeclass `Plus x y z`:
 
   The evidence for this typeclass is a function, which when given `z` can map the individual labels into

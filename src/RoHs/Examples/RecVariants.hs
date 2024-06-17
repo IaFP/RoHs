@@ -28,11 +28,11 @@ data t ~> u where
   Rec :: (forall y. (z ~<~ y) => V1 z (Mu (V1 y)) -> (Mu (V1 y) -> u) -> u)
       -> Mu (V1 z) ~> u
 
-brnr :: forall v w vw {u}. Plus v w vw => ((Mu (V1 v)) ~> u) -> ((Mu (V1 w)) ~> u) -> ((Mu (V1 vw)) ~> u)
+brnr :: forall v w {vw} {u}. Plus v w vw => ((Mu (V1 v)) ~> u) -> ((Mu (V1 w)) ~> u) -> ((Mu (V1 vw)) ~> u)
 brnr (Rec rfv) (Rec rfw) = Rec rfvw
   where
   rfvw :: forall y. (vw ~<~ y) => (V1 vw (Mu (V1 y))) -> (Mu (V1 y) -> u) -> u
-  rfvw = brn1 rfv rfw
+  rfvw = brn1 @v @w rfv rfw
   -- rfv @v :: V1 v (Mu (V1 vw)) -> (Mu (V1 vw) -> u) -> u
   -- rfw @w :: V1 w (Mu (V1 vw)) -> (Mu (V1 vw) -> u) -> u
   -- brn1 ... :: V1 vw (Mu (V1 vw)) -> (Mu (V1 vw) -> u) -> u
