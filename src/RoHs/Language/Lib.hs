@@ -180,20 +180,25 @@ compose :: (Int, a) -> (Int, b) -> (Int, c)
 -- again, we seem to need to iterate our definition... I'll do only a few cases
 -- I am concerned that we're going to stack up `unsafeCoerce`s, and that will
 -- lead to underspecified types (and so misbehaving coercions) in the middle...
-compose (0, _) _ = (0::Int, unsafeCoerce ())
+compose (0, _) _ = (0, unsafeCoerce ())
 compose (1, d) (_, e) = (1, unsafeCoerce (MkSolo (unsafeNth i e))) where
   MkSolo i = unsafeCoerce d
 compose (2, d) (_, e) = (2, unsafeCoerce (unsafeNth i e, unsafeNth j e))  where
   (i, j) = unsafeCoerce d
-compose (3, d) (_, e) = (3, unsafeCoerce (unsafeNth i e, unsafeNth j e, unsafeCoerce k e))  where
+compose (3, d) (_, e) = (3, unsafeCoerce (unsafeNth i e, unsafeNth j e, unsafeCoerce k e ))  where
   (i, j, k) = unsafeCoerce d
 compose (4, d) (_, e) = (4, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e))  where
   (i0, i1, i2, i3) = unsafeCoerce d
-compose (5, d) (_, e) = (4, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e, unsafeNth i4 e))  where
+compose (5, d) (_, e) = (5, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e, unsafeNth i4 e))  where
   (i0, i1, i2, i3, i4) = unsafeCoerce d
-compose (6, d) (_, e) = (4, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e, unsafeNth i4 e, unsafeNth i5 e))  where
+compose (6, d) (_, e) = (6, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e, unsafeNth i4 e, unsafeNth i5 e))  where
   (i0, i1, i2, i3, i4, i5) = unsafeCoerce d
+compose (7, d) (_, e) = (7, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e, unsafeNth i4 e, unsafeNth i5 e, unsafeNth i6 e))  where
+  (i0, i1, i2, i3, i4, i5, i6) = unsafeCoerce d
+compose (8, d) (_, e) = (8, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e, unsafeNth i4 e, unsafeNth i5 e, unsafeNth i6 e, unsafeNth i7 e))  where
+  (i0, i1, i2, i3, i4, i5, i6, i7) = unsafeCoerce d
 compose _ _ = error "compose ran out of patience"
+
 
 catC :: (Int, a) -> ((Int, c), d) -> ((Int, e), f) -> ((Int, g), h) -- these types are increasingly hilarious
 -- 0 and 1 require 0-ary records, ignored per above

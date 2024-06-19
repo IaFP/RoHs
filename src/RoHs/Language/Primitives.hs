@@ -117,6 +117,12 @@ inj1_I = undefined
 brn1_I :: Plus x y z => (V1 x t -> u) -> (V1 y t -> u) -> V1 z t -> u
 brn1_I = undefined
 
+-- brn1 :: (V1 x t -> u) -> (V1 y t -> u) -> V1 (x ~+~ y) t -> u
+-- brnr_I :: Plus x y z => Mu (V1 x t ~> u) -> (V1 y t ~> u) -> V1 z t ~> u
+-- brnr_I = undefined
+
+
+
 anaA1_I :: forall c {z} {t} {u}.
          All c z =>
          (forall s y {f}. (Plus (R '[s := f]) y z, R '[s := f] ~<~ z, y ~<~ z, c f)

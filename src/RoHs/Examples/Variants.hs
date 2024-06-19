@@ -77,8 +77,6 @@ threeB = mkA (mkC 1) (mkC 2)
 fourB :: Mu (V1 BigR)
 fourB = mkD (mkC 2)
 
-
-
 -- fourS :: Mu (V1 SmallR)
 fourS = desugar fourB
 

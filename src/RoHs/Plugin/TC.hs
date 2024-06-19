@@ -14,8 +14,6 @@ import GHC.Utils.Outputable hiding ((<>))
 -- ghc-tcplugin-api
 import qualified GHC.TcPlugin.API as API
 import GHC.TcPlugin.API (TcPluginErrorMessage(..))
-import qualified GHC.TcPluginM.Extra as API hiding (newWanted)
-
 
 import GHC.Builtin.Types
 
@@ -128,7 +126,7 @@ tcPluginInit = do
 
 -- The entry point for constraint solving
 tcPluginSolve :: PluginDefs -> [ API.Ct ] -> [ API.Ct ] -> API.TcPluginM API.Solve API.TcPluginSolveResult
-tcPluginSolve _ givens [] = do -- simplify given constraints, we don't have to worry about it yet
+tcPluginSolve _ [] [] = do -- simplify given constraints, we don't have to worry about it yet
   pure $ API.TcPluginOk [] []
 tcPluginSolve defs givens wanteds = do
   API.tcPluginTrace "--tcPluginSolveStart--" (ppr givens $$ ppr wanteds)
@@ -185,7 +183,7 @@ solve_trivial PluginDefs{..} givens acc ct
   , Just x_s@(r_tycon1, [_, assocs_x])<- API.splitTyConApp_maybe x
   , Just y_s@(r_tycon2, [_, assocs_y])<- API.splitTyConApp_maybe y
   , Just z_s@(r_tycon3, [_, assocs_z])<- API.splitTyConApp_maybe z
-  -- , r_tycon1 == r_tycon2 && r_tycon2 == r_tycon3 && r_tycon3 == rowTyCon -- should we be checking that the _r_tycon's are actually `R`?
+  , r_tycon1 == r_tycon2 && r_tycon2 == r_tycon3 && r_tycon3 == rTF
   , let xs = unfold_list_type_elems assocs_x
   , let ys = unfold_list_type_elems assocs_y
   , let zs = unfold_list_type_elems assocs_z
@@ -532,11 +530,10 @@ solve_trivial PluginDefs{..} givens acc ct
   , clsCon == API.classTyCon rowLeqCls
   , Just zTyVar <- getTyVar_maybe z
   , Just y0TyVar <- getTyVar_maybe y0
-  , Just (vTyVar, ctEq) <- findV1EqGiven v1TyCon zTyVar givens
+  , Just (vTyVar, _) <- findV1EqGiven v1TyCon zTyVar givens
   , Just (xy, ct1, ct2) <- findLeqGiven (API.classTyCon rowLeqCls) (vTyVar, y0TyVar) givens
-  -- , Just co_zEqv = isCoercionTy_maybe (ctEvidence ctEq)
   =  do {
-        ; let new_ev = API.evCast (API.ctEvExpr $ API.ctEvidence ct1) (mkCoercion API.Representational (API.ctPred ct1) predTy)
+        ; let new_ev = mkLeqTransEvTerm ct1 ct2 predTy
         --  TODO cast ctEvidence with ctEq first.
         ; API.tcPluginTrace "--Plugin solving ~<~ transitive" (vcat [ ppr ct
                                                                     , ppr zTyVar
@@ -548,7 +545,8 @@ solve_trivial PluginDefs{..} givens acc ct
         }
 
 
--- This is now looking like wack a mole
+-- This is now looking like whack a mole,
+-- precicely because GHC cannot do injectivity of TFs 𝚪, V1 x ~ V1 z |= x ~ z
 {-
 
  ---------------------------------------------------
@@ -558,10 +556,10 @@ solve_trivial PluginDefs{..} givens acc ct
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, z, y])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowLeqCls
-  , Just zTyVar <- getTyVar_maybe z
-  , Just yTyVar <- getTyVar_maybe y
+  , isJust $ getTyVar_maybe z
+  , isJust $ getTyVar_maybe y
   , let ctV1eqs = filter (\c -> case getEqPredTys_maybe (API.ctPred c) of
-                              {Just (_, lhsTy', rhsTy') | Just (tc, [_, l']) <- splitTyConApp_maybe lhsTy'
+                              {Just (_, lhsTy', rhsTy') | Just (tc, [_, _]) <- splitTyConApp_maybe lhsTy'
                                                         , Just (tc', [_, r']) <- splitTyConApp_maybe rhsTy'
                                                         , tc == tc', tc == v1TyCon
                                                         -> API.eqType r' z
@@ -569,7 +567,7 @@ solve_trivial PluginDefs{..} givens acc ct
                               ; _ -> False})
                     givens
   , let ctleqs = filter (\c -> case API.splitTyConApp_maybe (API.ctPred c) of
-                              {Just (tc, [_, x', y']) | tc == API.classTyCon rowLeqCls, isJust $ getTyVar_maybe y'
+                              {Just (tc, [_, _, y']) | tc == API.classTyCon rowLeqCls, isJust $ getTyVar_maybe y'
                                                       -> API.eqType y' y
 
                               ; _ -> False})
@@ -651,14 +649,19 @@ mkAllEvTerm evs predTy = API.evCast evAllTuple (mkCoercion API.Representational 
   evTuple = mkCoreConApps (cTupleDataCon (length evVars)) $ (map Type predTys) ++ map Var evVars
   evAllTupleTy = mkTupleTy1 API.Boxed [intTy, anyType]
   evAllTuple = mkCoreBoxedTuple [ mkCoreInt (length evVars)
-                                , Cast evTuple (mkCoercion API.Representational (mkConstraintTupleTy predTys)anyType)]
+                                , Cast evTuple (mkCoercion API.Representational (mkConstraintTupleTy predTys) anyType)]
+
+
+mkLeqTransEvTerm :: API.Ct -> API.Ct -> Type -> API.EvTerm
+mkLeqTransEvTerm ct1 _ predTy = API.evCast (API.ctEvExpr $ API.ctEvidence ct1) (mkCoercion API.Representational (API.ctPred ct1) predTy)
+
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
 mkCoercion = API.mkPluginUnivCo "Proven by RoHs.Plugin.TC"
 
 -- If you get a list of assocs, flatten it out
 unfold_list_type_elems :: API.TcType -> [API.TcType]
-unfold_list_type_elems ty =  sortAssocs $ go [] ty
+unfold_list_type_elems t =  sortAssocs $ go [] t
   where
     go :: [API.TcType] -> API.TcType -> [API.TcType]
     go acc ty | Nothing <- API.splitTyConApp_maybe ty
@@ -809,19 +812,18 @@ findV1EqGiven v1TyCon zTyVar givens = case filter (matchTyVar v1TyCon zTyVar) gi
                                         _    -> Nothing
    where
      matchTyVar :: API.TyCon -> TyVar -> API.Ct -> Bool
-     matchTyVar v1TyCon zTyVar c | pTy <- API.ctPred c
-                                 , isEqPrimPred pTy
-                                 , Just (_ , [_, _, _, t1]) <- splitTyConApp_maybe pTy
-                                 , Just (tycon, [_, tyVar]) <- splitTyConApp_maybe t1
-                                 , Just tv <- getTyVar_maybe tyVar
-                                 , tv == zTyVar
-                                 , tycon == v1TyCon
-                                 = True
-                                 | otherwise
-                                 = False
+     matchTyVar tc ztv c | pTy <- API.ctPred c
+                         , isEqPrimPred pTy
+                         , Just (_ , [_, _, _, t1]) <- splitTyConApp_maybe pTy
+                         , Just (tycon, [_, tyVar]) <- splitTyConApp_maybe t1
+                         , Just tv <- getTyVar_maybe tyVar
+                         , tycon == tc
+                         = tv == ztv
+                         | otherwise
+                         = False
 
 findLeqGiven :: API.TyCon -> (TyVar, TyVar) -> [API.Ct] -> Maybe (TyVar, API.Ct, API.Ct)
-findLeqGiven leqClsTyCon (tvx, tvy) givens | (ct1 : _) <-  filter (matchTyVar leqClsTyCon tvx) givens
+findLeqGiven leqClsTyCon (tvx, _) givens | (ct1 : _) <-  filter (matchTyVar leqClsTyCon tvx) givens
                                            , Just (_, [_, _, t2]) <- splitTyConApp_maybe (API.ctPred ct1)
                                            , Just tvxy <- getTyVar_maybe t2
                                            , (ct2 : _) <- filter (matchTyVar leqClsTyCon tvxy) givens
@@ -830,14 +832,14 @@ findLeqGiven leqClsTyCon (tvx, tvy) givens | (ct1 : _) <-  filter (matchTyVar le
                                            = Nothing
   where
     matchTyVar :: API.TyCon -> TyVar -> API.Ct -> Bool
-    matchTyVar leqClsTyCon tv c | pTy <- API.ctPred c
-                                , Just (clsTyCon , [_, t1, _]) <- splitTyConApp_maybe pTy
-                                , clsTyCon == leqClsTyCon
-                                , Just tvvar <- getTyVar_maybe t1
-                                , tvvar == tv
-                                = True
-                                | otherwise
-                                = False
+    matchTyVar tc tv c | pTy <- API.ctPred c
+                       , Just (clsTyCon , [_, t1, _]) <- splitTyConApp_maybe pTy
+                       , clsTyCon == tc
+                       , Just tvvar <- getTyVar_maybe t1
+                       , tvvar == tv
+                       = True
+                       | otherwise
+                       = False
 
 -- Return the given type family reduction, while emitting an additional type error with the given message.
 throwTypeError :: API.Reduction -> API.TcPluginErrorMessage -> API.TcPluginM API.Rewrite API.TcPluginRewriteResult
