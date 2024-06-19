@@ -68,6 +68,8 @@ data PluginDefs =
     , rowLeqCls        :: !API.Class -- standin for ~<~
     , rowPlusCls       :: !API.Class -- standin for Plus
     , allCls           :: !API.Class -- standin for All
+
+    , composeId        :: !API.Id    -- standin for compose function
     }
 
 
@@ -111,6 +113,9 @@ tcPluginInit = do
   rowPlusCls     <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "Plus")
   allCls         <- API.tcLookupClass =<< API.lookupOrig typesModule (API.mkClsOcc "All")
 
+  composeId      <- API.tcLookupId =<< API.lookupOrig typesModule (API.mkVarOcc "compose")
+
+
   pure (PluginDefs { rowPlusTF     = rowPlusTF
                    , rowTyCon      = rowTyCon
                    , rTF           = rTF
@@ -122,6 +127,8 @@ tcPluginInit = do
                    , rowPlusCls    = rowPlusCls
                    , rowLeqCls     = rowLeqCls
                    , allCls        = allCls
+
+                   , composeId     = composeId
                    })
 
 -- The entry point for constraint solving
@@ -317,8 +324,7 @@ solve_trivial PluginDefs{..} givens acc ct
   , let zs = sortAssocs (xs ++ ys)
   , Just ps <- checkConcatEv xs ys zs
   =  do { API.tcPluginTrace "--Plugin solving simple Plus--" (vcat [ ppr clsCon
-                                                                    , ppr x, ppr y, ppr z
-                                                                    , ppr rowPlusTF
+                                                                    , ppr xs, ppr ys, ppr z
                                                                     ])
         ; let rowAssocKi = mkTyConApp rowAssocTyCon [kx]
               z0 = API.mkTyConApp r_tycon [kx,  mkPromotedListTy rowAssocKi zs]
@@ -332,7 +338,7 @@ solve_trivial PluginDefs{..} givens acc ct
                                     , [API.mkNonCanonical nw]
                                     , [])
                   }
-          else do { API.tcPluginTrace "--Plugin overlapping rows--" (ppr ct)
+          else do { API.tcPluginTrace "--Plugin overlapping rows--" (vcat [ppr ct, ppr zs, ppr inter])
                   ; error_predTy <- API.mkTcPluginErrorTy (mkSameLabelError x y inter)
                   ; nw_error <- API.newWanted (API.ctLoc ct) error_predTy
                   ; return $ acc <> ([], [], [API.mkNonCanonical nw_error])
@@ -533,7 +539,7 @@ solve_trivial PluginDefs{..} givens acc ct
   , Just (vTyVar, _) <- findV1EqGiven v1TyCon zTyVar givens
   , Just (xy, ct1, ct2) <- findLeqGiven (API.classTyCon rowLeqCls) (vTyVar, y0TyVar) givens
   =  do {
-        ; let new_ev = mkLeqTransEvTerm ct1 ct2 predTy
+        ; let new_ev = mkLeqTransEvTerm composeId ct1 ct2 predTy
         --  TODO cast ctEvidence with ctEq first.
         ; API.tcPluginTrace "--Plugin solving ~<~ transitive" (vcat [ ppr ct
                                                                     , ppr zTyVar
@@ -651,9 +657,21 @@ mkAllEvTerm evs predTy = API.evCast evAllTuple (mkCoercion API.Representational 
   evAllTuple = mkCoreBoxedTuple [ mkCoreInt (length evVars)
                                 , Cast evTuple (mkCoercion API.Representational (mkConstraintTupleTy predTys) anyType)]
 
+-- We have x ~<~ y and y ~<~ z
+-- We need to build an evidence for x ~<~ z (toType)
+-- we have a function compose :: (Int, a) -> (Int, b) -> (Int, c)
+--
+mkLeqTransEvTerm :: API.Id -> API.Ct -> API.Ct -> Type -> API.EvTerm
+mkLeqTransEvTerm composeId ct1 ct2 toType = API.evCast evExpr (mkCoercion API.Representational tupleTy toType)
+  where
+    evExpr :: API.EvExpr
+    evExpr = mkCoreApps (Var composeId) [Type anyType, Type anyType, Type anyType, arg1, arg2]
 
-mkLeqTransEvTerm :: API.Ct -> API.Ct -> Type -> API.EvTerm
-mkLeqTransEvTerm ct1 _ predTy = API.evCast (API.ctEvExpr $ API.ctEvidence ct1) (mkCoercion API.Representational (API.ctPred ct1) predTy)
+    tupleTy = mkTupleTy1 API.Boxed [intTy, anyType]
+
+    arg1, arg2 :: API.EvExpr
+    arg1 = Cast (API.ctEvExpr (API.ctEvidence ct1)) (mkCoercion API.Representational (API.ctPred ct1) tupleTy)
+    arg2 = Cast (API.ctEvExpr (API.ctEvidence ct2)) (mkCoercion API.Representational (API.ctPred ct2) tupleTy)
 
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
@@ -774,27 +792,27 @@ setDiff xs ys = setDiff_inner [] xs ys
     setDiff_inner acc xs' (y : ys') | any (API.eqType y) xs' = setDiff_inner acc xs' ys'
                                     | otherwise = setDiff_inner (y:acc) xs' ys'
 
--- computes the set interction of two rows
+-- computes the set intersection of two rows
 setIntersect :: [Type] -> [Type] -> [Type]
 setIntersect xs ys = if length xs < length ys then set_intersection [] xs ys else set_intersection [] ys xs
   where
     set_intersection acc [] _ = acc
-    set_intersection acc (x:xs') ys' | any (\y -> EQ == eqAssoc x y) ys' = set_intersection (x:acc) xs' ys'
-                                     | otherwise = set_intersection acc xs' ys
+    set_intersection acc (x:xs') ys' | any (eqAssoc x) ys' = set_intersection (x:acc) xs' ys'
+                                     | otherwise = set_intersection acc xs' ys'
 
 -- At this point i'm just sorting on the kind of the type which happens to be a string literal, Sigh ...
 cmpAssoc :: API.TcType -> API.TcType -> Ordering
-cmpAssoc lty rty | Just (_, [_, LitTy lbl_l, _]) <- API.splitTyConApp_maybe lty
-                 , Just (_, [_, LitTy lbl_r, _]) <- API.splitTyConApp_maybe rty
-                 = cmpTyLit lbl_l lbl_r
-cmpAssoc _ _ = EQ
+cmpAssoc lty rty | Just (_, [_, LitTy l@(StrTyLit _), _]) <- API.splitTyConApp_maybe lty
+                 , Just (_, [_, LitTy r@(StrTyLit _), _]) <- API.splitTyConApp_maybe rty
+                 = cmpTyLit l r
+cmpAssoc _ _ = error "shouldn't happen cmpAssoc"
 
 -- make GHC Type checker go brrr
-eqAssoc :: API.TcType -> API.TcType -> Ordering
-eqAssoc lty rty | Just (_, [_, LitTy lbl_l, _]) <- API.splitTyConApp_maybe lty
-                , Just (_, [_, LitTy lbl_r, _]) <- API.splitTyConApp_maybe rty
-                = cmpTyLit lbl_l lbl_r
-eqAssoc _ _ = GT
+eqAssoc :: API.TcType -> API.TcType -> Bool
+eqAssoc lty rty | Just (_, [_, LitTy (StrTyLit lbl_l), _]) <- API.splitTyConApp_maybe lty
+                , Just (_, [_, LitTy (StrTyLit lbl_r), _]) <- API.splitTyConApp_maybe rty
+                = lbl_l == lbl_r
+eqAssoc _ _ = error "shouldn't happen eqAssoc"
 
 -- This is the "cannonical/principal" type representation of a row type
 sortAssocs :: [API.TcType] -> [API.TcType]

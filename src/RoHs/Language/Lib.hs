@@ -55,7 +55,7 @@ It also exports the Primitives, so users must not explicitly import that module.
 They should only depend on this module.
 -}
 
-import RoHs.Language.Types
+import RoHs.Language.Types hiding (compose, unsafeNth)
 import RoHs.Language.Primitives
 
 import Data.Tuple

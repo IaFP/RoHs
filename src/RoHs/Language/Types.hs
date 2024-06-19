@@ -7,6 +7,8 @@
 module RoHs.Language.Types where
 
 import GHC.Base
+import Unsafe.Coerce
+import Data.Tuple
 
 data Row :: Type -> Type
 
@@ -55,3 +57,66 @@ type family Each (f :: (a -> b)) (r :: Row a) :: Row b where
   -- -fundep, but that seems hard to use...
 
 class All (cls :: a -> Constraint) (r :: Row a)
+
+
+
+
+unsafeNth :: forall {a} {b}. Int -> a -> b
+unsafeNth 0 x = y where
+   MkSolo y = unsafeCoerce x
+unsafeNth 1 x = y where
+   (_, y) = unsafeCoerce x
+unsafeNth 2 x = y where
+   (_, _, y) = unsafeCoerce x
+unsafeNth 3 x = y where
+   (_, _, _, y) = unsafeCoerce x
+unsafeNth 4 x = y where
+   (_, _, _, _, y) = unsafeCoerce x
+unsafeNth 5 x = y where
+   (_, _, _, _, _, y) = unsafeCoerce x
+unsafeNth 6 x = y where
+   (_, _, _, _, _, _, y) = unsafeCoerce x
+unsafeNth 7 x = y where
+   (_, _, _, _, _, _, _, y) = unsafeCoerce x
+unsafeNth 8 x = y where
+   (_, _, _, _, _, _, _, _, y) = unsafeCoerce x
+unsafeNth 9 x = y where
+   (_, _, _, _, _, _, _, _, _, y) = unsafeCoerce x
+unsafeNth 10 x = y where
+   (_, _, _, _, _, _, _, _, _, _, y) = unsafeCoerce x
+unsafeNth 11 x = y where
+   (_, _, _, _, _, _, _, _, _, _, _, y) = unsafeCoerce x
+unsafeNth 12 x = y where
+   (_, _, _, _, _, _, _, _, _, _, _, _, y) = unsafeCoerce x
+unsafeNth 13 x = y where
+   (_, _, _, _, _, _, _, _, _, _, _, _, _, y) = unsafeCoerce x
+unsafeNth 14 x = y where
+   (_, _, _, _, _, _, _, _, _, _, _, _, _, _, y) = unsafeCoerce x
+unsafeNth 15 x = y where
+   (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, y) = unsafeCoerce x
+unsafeNth 16 x = y where
+   (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, y) = unsafeCoerce x
+unsafeNth _ _ = error "unsafeNth exceeded limit"
+
+compose :: (Int, a) -> (Int, b) -> (Int, c)
+-- again, we seem to need to iterate our definition... I'll do only a few cases
+-- I am concerned that we're going to stack up `unsafeCoerce`s, and that will
+-- lead to underspecified types (and so misbehaving coercions) in the middle...
+compose (0, _) _ = (0, unsafeCoerce ())
+compose (1, d) (_, e) = (1, unsafeCoerce (MkSolo (unsafeNth i e))) where
+   MkSolo i = unsafeCoerce d
+compose (2, d) (_, e) = (2, unsafeCoerce (unsafeNth i e, unsafeNth j e))  where
+   (i, j) = unsafeCoerce d
+compose (3, d) (_, e) = (3, unsafeCoerce (unsafeNth i e, unsafeNth j e, unsafeCoerce k e ))  where
+   (i, j, k) = unsafeCoerce d
+compose (4, d) (_, e) = (4, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e))  where
+   (i0, i1, i2, i3) = unsafeCoerce d
+compose (5, d) (_, e) = (5, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e, unsafeNth i4 e))  where
+   (i0, i1, i2, i3, i4) = unsafeCoerce d
+compose (6, d) (_, e) = (6, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e, unsafeNth i4 e, unsafeNth i5 e))  where
+   (i0, i1, i2, i3, i4, i5) = unsafeCoerce d
+compose (7, d) (_, e) = (7, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e, unsafeNth i4 e, unsafeNth i5 e, unsafeNth i6 e))  where
+   (i0, i1, i2, i3, i4, i5, i6) = unsafeCoerce d
+compose (8, d) (_, e) = (8, unsafeCoerce (unsafeNth i0 e, unsafeNth i1 e, unsafeNth i2 e, unsafeNth i3 e, unsafeNth i4 e, unsafeNth i5 e, unsafeNth i6 e, unsafeNth i7 e))  where
+   (i0, i1, i2, i3, i4, i5, i6, i7) = unsafeCoerce d
+compose _ _ = error "compose ran out of patience"

@@ -11,12 +11,10 @@
 
 module RoHs.Examples.RecVariants where
 
-
 import RoHs.Language.Lib
 import RoHs.Examples.Variants
 
 
-import Data.Proxy
 default (Int)
 
 -- cases :: (V1 z (Mu (V1 z)) -> (Mu (V1 z) -> r) -> r) -> Mu (V1 z) -> r
@@ -77,7 +75,12 @@ mkIN e =  Mk (con1 @"dec1" (O e))
 
 
 
--- evalP :: NatPosR ~<~ z => V1 NatPosR (Mu (V1 z)) -> p -> Int
--- evalN :: NatNegR ~<~ z => V1 NatNegR (Mu (V1 z)) -> p -> Int
+evalP :: NatPosR ~<~ y => V1 NatPosR (Mu (V1 y)) -> (Mu (V1 y) -> u) -> u
+evalN :: NatNegR ~<~ y => V1 NatNegR (Mu (V1 y)) -> (Mu (V1 y) -> u) -> u
 -- evalP = cases (evalZP `brn1` evalIP)
 -- evalN = cases (evalZN `brn1` evalIN)
+
+evalP = undefined
+evalN = undefined
+
+evalPN = (~$~) ((Rec evalP) `brnr` (Rec evalN))
