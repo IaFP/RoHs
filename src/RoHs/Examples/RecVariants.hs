@@ -23,7 +23,7 @@ default (Int)
 -- brn1 :: (V1 x t -> u) -> (V1 y t -> u) -> (V1 (x ~+~ y) t -> u)
 
 data t ~> u where
-  Rec :: (forall y. (z ~<~ y) => V1 z (Mu (V1 y)) -> (Mu (V1 y) -> u) -> u)
+  Rec :: (forall y x. Plus z x y => V1 z (Mu (V1 y)) -> (Mu (V1 y) -> u) -> u)
       -> Mu (V1 z) ~> u
 
 
@@ -33,7 +33,7 @@ data t ~> u where
 brnr :: forall v w {vw} {u}. Plus v w vw => ((Mu (V1 v)) ~> u) -> ((Mu (V1 w)) ~> u) -> ((Mu (V1 vw)) ~> u)
 brnr (Rec rfv) (Rec rfw) = Rec rfvw
   where
-  rfvw :: forall y. (vw ~<~ y) => (V1 vw (Mu (V1 y))) -> (Mu (V1 y) -> u) -> u
+  rfvw :: forall z y. Plus vw z y => (V1 vw (Mu (V1 y))) -> (Mu (V1 y) -> u) -> u
   rfvw = brn1 @v @w rfv rfw
   -- rfv @v :: V1 v (Mu (V1 vw)) -> (Mu (V1 vw) -> u) -> u
   -- rfw @w :: V1 w (Mu (V1 vw)) -> (Mu (V1 vw) -> u) -> u
