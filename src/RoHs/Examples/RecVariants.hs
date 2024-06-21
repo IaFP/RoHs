@@ -75,12 +75,13 @@ mkIN e =  Mk (con1 @"dec1" (O e))
 
 
 
-evalP :: NatPosR ~<~ y => V1 NatPosR (Mu (V1 y)) -> (Mu (V1 y) -> u) -> u
-evalN :: NatNegR ~<~ y => V1 NatNegR (Mu (V1 y)) -> (Mu (V1 y) -> u) -> u
+evalP :: NatPosR ~<~ y => V1 NatPosR (Mu (V1 y)) -> (Mu (V1 y) -> Int) -> Int
+evalN :: NatNegR ~<~ y => V1 NatNegR (Mu (V1 y)) -> (Mu (V1 y) -> Int) -> Int
 -- evalP = cases (evalZP `brn1` evalIP)
 -- evalN = cases (evalZN `brn1` evalIN)
 
-evalP = undefined
-evalN = undefined
+evalP = evalZP `brn1` evalIP
+evalN = evalZN `brn1` evalIN
 
 evalPN = (~$~) ((Rec evalP) `brnr` (Rec evalN))
+
