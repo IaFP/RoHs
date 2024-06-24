@@ -68,6 +68,7 @@ library
                       RoHs.Examples.Basic
                       RoHs.Examples.Variants
                       RoHs.Examples.RecVariants
+                      -- RoHs.Examples.RecVariants2
 
     -- Modules included in this library but not exported.
     other-modules:
