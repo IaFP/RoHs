@@ -58,9 +58,10 @@ They should only depend on this module.
 import RoHs.Language.Types hiding (compose, unsafeNth)
 import RoHs.Language.Primitives
 
-import Data.Tuple
+import GHC.Tuple
 import Unsafe.Coerce
 import Data.Proxy
+import GHC.Stack
 
 default (Int)
 
@@ -140,7 +141,7 @@ sndC = Prelude.snd
 
 unsafeNth :: forall {a} {b}. Int -> a -> b
 unsafeNth 0 x = y where
-  MkSolo y = unsafeCoerce x
+  y = unsafeCoerce x
 unsafeNth 1 x = y where
   (_, y) = unsafeCoerce x
 unsafeNth 2 x = y where
@@ -173,16 +174,16 @@ unsafeNth 15 x = y where
   (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, y) = unsafeCoerce x
 unsafeNth 16 x = y where
   (_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, y) = unsafeCoerce x
-unsafeNth _ _ = error "unsafeNth exceeded limit"
+unsafeNth i _ = error ("unsafeNth exceeded limit " ++ show i)
 
 
 compose :: (Int, a) -> (Int, b) -> (Int, c)
 -- again, we seem to need to iterate our definition... I'll do only a few cases
 -- I am concerned that we're going to stack up `unsafeCoerce`s, and that will
 -- lead to underspecified types (and so misbehaving coercions) in the middle...
-compose (0, _) _ = (0, unsafeCoerce ())
-compose (1, d) (_, e) = (1, unsafeCoerce (MkSolo (unsafeNth i e))) where
-  MkSolo i = unsafeCoerce d
+compose (0, _) _ = error "compose 0"
+compose (1, d) (_, e) = (1, unsafeCoerce (unsafeNth i e)) where
+  i = unsafeCoerce d
 compose (2, d) (_, e) = (2, unsafeCoerce (unsafeNth i e, unsafeNth j e))  where
   (i, j) = unsafeCoerce d
 compose (3, d) (_, e) = (3, unsafeCoerce (unsafeNth i e, unsafeNth j e, unsafeCoerce k e ))  where
@@ -213,11 +214,13 @@ get (1, n) _ p = field n p
 get _      _ _ = error "catC.get ran out of patience"
 
 field :: forall {c} {d} {e}. Int -> ((Int, c), d) -> e
-field n ((_, d), r) = unsafeNth (unsafeNth n d) r
+field n ((k, d), r) = if n < k
+                         then unsafeNth (unsafeNth n d) r
+                         else error ("field " ++ show n ++ " " ++ show k)
 
 manyIn :: Int -> Int -> (Int, a)
-manyIn 2 0 = (1, unsafeCoerce (MkSolo (1::Int)))
-manyIn 2 1 = (1, unsafeCoerce (MkSolo (0::Int)))
+manyIn 2 0 = (1, unsafeCoerce (1::Int))
+manyIn 2 1 = (1, unsafeCoerce (0::Int))
 manyIn 3 0 = (2, unsafeCoerce (1::Int, 2::Int))
 manyIn 3 1 = (2, unsafeCoerce (0::Int, 2::Int))
 manyIn 3 2 = (2, unsafeCoerce (0::Int, 1::Int))
@@ -241,7 +244,7 @@ inj (-1, _) kv    = kv
 inj (_, d) (k, v) = (unsafeNth k d, v)
 
 oneIn :: Int -> (Int, a)
-oneIn k = (1, unsafeCoerce (MkSolo k))
+oneIn k = (1, unsafeCoerce k)
 
 plusE :: forall {a}. Int -> Int -> (Int, a)
 plusE 2 k = (2, unsafeCoerce (pick 0 k, pick 1 k))

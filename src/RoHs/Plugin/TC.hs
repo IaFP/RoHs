@@ -405,7 +405,7 @@ solve_trivial PluginDefs{..} givens acc ct
   -- Handles the case where we have [W] (R [x := t] ~+~ r) ~#  (R [x := t, y := u])
   -- This just emits the equality constraint [W] r ~# R [y := u]
   -- This is very specific becuase i want it to be the last resort and not cause the plugin to loop
-{-
+  {-
             r = x \ y
   -------------------------------
         𝚪 |= (R x ~+~ R r)  ~  R y
@@ -635,14 +635,23 @@ unzipAssocList t = unzip <$> mapM openAssoc (unfold_list_type_elems t) where
 mkLtEvTerm :: [Int] -> Type -> API.EvTerm
 mkLtEvTerm is predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
   n = length is
-  tupleTy = mkTupleTy1 API.Boxed [intTy, mkTupleTy1 API.Boxed (replicate n intTy)]
-  tuple = mkCoreBoxedTuple [mkCoreInt n, mkCoreBoxedTuple (map mkCoreInt is)]
+  tupleTy = if n > 1
+            then mkTupleTy1 API.Boxed [intTy, mkTupleTy1 API.Boxed (replicate n intTy)]
+            else mkTupleTy1 API.Boxed [intTy, intTy]
+  tuple = if n > 1
+          then mkCoreBoxedTuple [mkCoreInt n, mkCoreBoxedTuple (map mkCoreInt is)]
+          else mkCoreBoxedTuple [mkCoreInt n, mkCoreInt (head is)]
 
 mkPlusEvTerm :: [(Int, Int)] -> Type -> API.EvTerm
 mkPlusEvTerm pairs predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
   n = length pairs
-  tupleTy = mkTupleTy1 API.Boxed [intTy, mkTupleTy1 API.Boxed (replicate n (mkTupleTy1 API.Boxed [intTy, intTy]))]
-  tuple = mkCoreBoxedTuple [mkCoreInt n, mkCoreBoxedTuple [mkCoreBoxedTuple [mkCoreInt x, mkCoreInt y] | (x, y) <- pairs]]
+  tupleTy = if n > 1
+            then mkTupleTy1 API.Boxed [intTy, mkTupleTy1 API.Boxed (replicate n (mkTupleTy1 API.Boxed [intTy, intTy]))]
+            else mkTupleTy1 API.Boxed [intTy, mkTupleTy1 API.Boxed [intTy, intTy]]
+  tuple = if n > 1
+          then mkCoreBoxedTuple [mkCoreInt n, mkCoreBoxedTuple [mkCoreBoxedTuple [mkCoreInt x, mkCoreInt y] | (x, y) <- pairs]]
+          else mkCoreBoxedTuple [mkCoreInt n, head [mkCoreBoxedTuple [mkCoreInt x, mkCoreInt y] | (x, y) <- pairs]]
+
 
 mkReflEvTerm :: Type -> API.EvTerm
 mkReflEvTerm predTy = API.evCast tuple (mkCoercion API.Representational tupleTy predTy) where
@@ -652,10 +661,14 @@ mkReflEvTerm predTy = API.evCast tuple (mkCoercion API.Representational tupleTy 
 mkAllEvTerm :: [API.CtEvidence] -> Type -> API.EvTerm
 mkAllEvTerm evs predTy = API.evCast evAllTuple (mkCoercion API.Representational evAllTupleTy predTy) where
   (evVars, predTys) = unzip [(evVar, pTy) | API.CtWanted pTy (API.EvVarDest evVar) _ _ <- evs]
-  evTuple = mkCoreConApps (cTupleDataCon (length evVars)) $ (map Type predTys) ++ map Var evVars
+  -- evTuple = mkCoreConApps (cTupleDataCon (length evVars)) $ (map Type predTys) ++ map Var evVars
+  evTuple = if length evVars > 1
+            then mkCoreConApps (cTupleDataCon (length evVars)) $ (map Type predTys) ++ map Var evVars
+            else Var (head evVars)
   evAllTupleTy = mkTupleTy1 API.Boxed [intTy, anyType]
   evAllTuple = mkCoreBoxedTuple [ mkCoreInt (length evVars)
-                                , Cast evTuple (mkCoercion API.Representational (mkConstraintTupleTy predTys) anyType)]
+                                , Cast evTuple
+                                  (mkCoercion API.Representational (mkConstraintTupleTy predTys) anyType) ]
 
 -- We have x ~<~ y and y ~<~ z
 -- We need to build an evidence for x ~<~ z (toType)

@@ -68,6 +68,7 @@ library
                       RoHs.Examples.Basic
                       RoHs.Examples.Variants
                       RoHs.Examples.RecVariants
+                      RoHs.Examples.ModularInterp
                       -- RoHs.Examples.RecVariants2
 
     -- Modules included in this library but not exported.
@@ -93,7 +94,8 @@ library
                       mtl ^>= 2.3,
                       ghc-tcplugins-extra ^>= 0.4.5,
                       syb ^>= 0.7,
-                      containers
+                      containers,
+                      ghc-prim
     -- Directories containing source files.
     hs-source-dirs:   src
 

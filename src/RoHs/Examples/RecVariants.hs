@@ -84,25 +84,45 @@ evalPN = (~$~) ((Rec evalP) `brnr` (Rec evalN))
 type LamR = R '[ "var" := Zero Int, "lam" := One, "app" := Two]
 
 
-mkVar :: R '["var" := Zero Int] ~<~ z => Int -> Mu (V1 z)
+mkVar :: Int -> Mu (V1 (R '["var" := Zero Int]))
 mkVar i = Mk (con1 @"var" (Z i))
 
-mkApp :: (R '["app" := Two] ~<~ z) => Mu (V1 z) -> Mu (V1 z) -> Mu (V1 z)
-mkApp e1 e2 = Mk (con1 @"app" (T e1 e2))
+mkLam :: ( All Functor x
+         , R '["lam" := One] ~<~ z, x ~<~ z) => Mu (V1 x) -> Mu (V1 z)
+mkLam e = Mk (con1 @"lam" (O e'))
+  where e' = injR e
 
-mkLam :: (R '["lam" := One] ~<~ z) => Mu (V1 z) -> Mu (V1 z)
-mkLam e = Mk (con1 @"lam" (O e))
+
+mkApp :: (All Functor x, All Functor y,
+          R '["app" := Two] ~<~ z, x ~<~ z, y ~<~ z) => Mu (V1 x) -> Mu (V1 y) -> Mu (V1 z)
+mkApp e1 e2 = Mk (con1 @"app" (T e1' e2'))
+  where e1' = injR e1
+        e2' = injR e2
+
 
 showVar :: V1 (R '["var" := Zero Int]) t -> p -> String
 showVar e _ = case1 @"var" (\(Z i) -> show i) e
 
 showLam :: V1 (R '["lam" := One]) t -> (t -> String) -> String
-showLam e r = case1 @"lam" (\(O b) -> "(λ " ++ r b ++ ")") e
+showLam e r = case1 @"lam" (\(O b) -> "(\\ " ++ r b ++ ")") e
 
 showApp :: V1 (R '["app" := Two]) t -> (t -> String) -> String
 showApp e r = case1 @"app" (\(T fn a) -> (r fn)  ++ " " ++ (r a)) e
 
+
+showTerm :: Mu (V1 LamR) -> String
 showTerm x = ((Rec showVar) `brnr` (Rec showLam) `brnr` (Rec showApp)) ~$~ x
 
-idLam :: Mu (V1 LamR)
-idLam = mkApp (mkLam (mkVar 0)) (mkVar 0)
+
+showLamR :: Mu (V1 (R '["var" := Zero Int, "lam" := One])) -> String
+showLamR x = ((Rec showVar) `brnr` (Rec showLam)) ~$~ x
+
+
+idLam :: Mu (V1 (R '["var" := Zero Int, "lam" := One]))
+idLam = mkLam (mkVar 0)
+
+appId :: Mu (V1 LamR)
+appId = mkApp idLam (mkVar 0)
+
+idstr :: String
+idstr = showLamR idLam
