@@ -2,6 +2,7 @@
 {-# LANGUAGE FunctionalDependencies #-}  -- because TypeFamilyDependencies doesn't really do what I'd like yet...
 {-# LANGUAGE ImpredicativeTypes #-}  -- but was this applied before?  Otherwise, I'm not sure why my definitions ever typed...
 {-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -ddump-rn-trace -dcore-lint -fprint-explicit-kinds -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -ddump-tc-trace -fforce-recomp -dcore-lint -ddump-ds -O0 -dasm-lint -dcmm-lint -ddump-asm-native -ddump-exitify -fplugin RoHs.Plugin -fplugin-opt debug #-}
@@ -24,7 +25,7 @@ data Zero t e = Z t     deriving Functor
 data One e    = O e     deriving Functor
 data Two e    = T e e   deriving Functor
 
-newtype Mu f     = Mk (f (Mu f))
+data Mu f     = Mk (f (Mu f))
 
 instance Show t => Show (Zero t e) where
   show (Z t) =  "Z " ++ show t

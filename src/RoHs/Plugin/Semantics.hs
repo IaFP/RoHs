@@ -68,8 +68,8 @@ ana0Core (opts, mgs, oType)
              fId = mkLocalId fn  manyDataConTy fTy
              vId = mkLocalId vn  manyDataConTy vzTy
 
-             dAllRepTy = mkTupleTy Boxed [intTy, anyType]
-             vRepTy = mkTupleTy Boxed [intTy, anyType]
+             dAllRepTy = mkTupleTy1 Boxed [intTy, anyType]
+             vRepTy = mkTupleTy1 Boxed [intTy, anyType]
 
              dAllrep = Cast (Var dId) (mkCastCo dAllTy dAllRepTy)
              vrep = Cast (Var vId) (mkCastCo vzTy vRepTy)
@@ -100,7 +100,7 @@ ana0Core (opts, mgs, oType)
                                                         , mkCoreApps (Var fstId) [Type intTy, Type anyType, vrep]
                                                         , mkCoreApps (Var sndId) [Type intTy, Type anyType, dAllrep]])
                        (substCo subst $ mkCastCo anyType cuTy)
-                     , Cast (mkCoreTup []) (substCo subst $ mkCastCo (mkTupleTy Boxed []) proxyTy)-- not used so making this up
+                     , Cast (mkCoreTup []) (substCo subst $ mkCastCo (mkTupleTy1 Boxed []) proxyTy)-- not used so making this up
                      , mkCoreApps (Var sndId) [Type intTy, Type anyType, vrep]])
 
              debug_msg = text "ana0Fun" <+> vcat [ text "Type" <+> ppr oType
@@ -149,8 +149,8 @@ brnCore (opts, mgs, oType)
               vgy = mkLocalId vgyn manyDataConTy arggTy
               vz =  mkLocalId vzn manyDataConTy argvzTy
 
-              dRepTy = mkTupleTy Boxed [intTy, anyType]
-              dVRepTy = mkTupleTy Boxed [intTy, anyType]
+              dRepTy = mkTupleTy1 Boxed [intTy, anyType]
+              dVRepTy = mkTupleTy1 Boxed [intTy, anyType]
 
               body = mkCoreApps (Var brnId)
                                 [ Type anyType, Type anyType, Type anyType, Type anyType, Type resultTy
@@ -184,7 +184,7 @@ labVCore (opts, _, oType)
              tn = mkName (us !! 1) "t"
              t = mkLocalId tn manyDataConTy argTy
 
-             co = mkCastCo (mkTupleTy Boxed [intTy, argTy]) resultTy
+             co = mkCastCo (mkTupleTy1 Boxed [intTy, argTy]) resultTy
              body = Cast (mkCoreTup [mkCoreInt 0, (Var t)]) co
 
              debug_msg = text "labVCore" <+> vcat [ text "Type" <+> ppr oType
@@ -211,7 +211,7 @@ unlabVCore (opts, mgs, oType)
 
              co = mkCastCo anyType resultTy
 
-             v = Cast (Var vId) (mkCastCo argTy (mkTupleTy Boxed [intTy, anyType]))
+             v = Cast (Var vId) (mkCastCo argTy (mkTupleTy1 Boxed [intTy, anyType]))
 
              body = mkCoreApps (Var sndId) [Type intTy, Type anyType, v]
 
@@ -236,7 +236,7 @@ labRCore  (opts, _, oType) -- :: forall s {t}. t -> R0 (R '[s := t])
              tn = mkName (us !! 1) "t"
              t =  mkLocalId tn manyDataConTy argTy
 
-             rowRepTy = mkTupleTy Boxed [ mkTupleTy Boxed [intTy, mkTupleTy1 Boxed [intTy]], mkTupleTy1 Boxed [argTy]]
+             rowRepTy = mkTupleTy1 Boxed [ mkTupleTy1 Boxed [intTy, mkTupleTy1 Boxed [intTy]], mkTupleTy1 Boxed [argTy]]
 
              body = mkCoreTup [ mkCoreTup [ mkCoreInt 1
                                           , mkCoreBoxedTuple [mkCoreInt 0] ]   -- ( (1, (0))
@@ -265,7 +265,7 @@ unlabRCore (opts, mgs, oType)   -- oType = forall s t. R0 (R '[s := t]) -> t
              rn = mkName (us !! 2) "r0"
              rId = mkLocalId rn manyDataConTy argTy
 
-             repTy = mkTupleTy Boxed [mkTupleTy Boxed [intTy, mkTupleTy1 Boxed [intTy]], mkTupleTy1 Boxed [resultTy]]
+             repTy = mkTupleTy1 Boxed [mkTupleTy1 Boxed [intTy, mkTupleTy1 Boxed [intTy]], mkTupleTy1 Boxed [resultTy]]
 
              co = mkCastCo argTy repTy
              r = Cast (Var rId) co
@@ -315,9 +315,9 @@ prjCore (opts, mgs, oType) -- forall z y. z ~<~ y => R0 y -> R0 z
              d = mkLocalId dn manyDataConTy dTy
              ry = mkLocalId ryn  manyDataConTy argTy
 
-             dRepTy = mkTupleTy Boxed [intTy, anyType]
+             dRepTy = mkTupleTy1 Boxed [intTy, anyType]
 
-             rowRepTy = mkTupleTy Boxed [mkTupleTy Boxed [intTy, anyType], anyType]
+             rowRepTy = mkTupleTy1 Boxed [mkTupleTy1 Boxed [intTy, anyType], anyType]
 
              co = mkCastCo rowRepTy resultTy
 
@@ -354,8 +354,8 @@ catCore (opts, mgs, oType)                                    -- :: oType = fora
        ; let cat0Fun :: CoreExpr
              cat0Fun = mkCoreLams (tyVars ++ [dplus, rx, ry]) (Cast body (mkCastCo rowRepTy resultTy))
 
-             dRepTy = mkTupleTy Boxed [intTy, anyType]
-             rowRepTy = mkTupleTy Boxed [mkTupleTy Boxed [intTy, anyType], anyType]
+             dRepTy = mkTupleTy1 Boxed [intTy, anyType]
+             rowRepTy = mkTupleTy1 Boxed [mkTupleTy1 Boxed [intTy, anyType], anyType]
 
              dn    = mkName (us !! 3) "$dplus"
              dplus = mkLocalId dn manyDataConTy dplusTy
@@ -406,8 +406,8 @@ injCore (opts, mgs, oType) -- forall y z. y ~<~ z => V0 y -> V0 z
              d = mkLocalId dn manyDataConTy dTy
              ry = mkLocalId ryn manyDataConTy argTy
 
-             dRepTy = mkTupleTy Boxed [intTy, anyType]
-             dRowRepTy = mkTupleTy Boxed [intTy, anyType]
+             dRepTy = mkTupleTy1 Boxed [intTy, anyType]
+             dRowRepTy = mkTupleTy1 Boxed [intTy, anyType]
 
              co = mkCastCo dRowRepTy resultTy
 
@@ -457,8 +457,8 @@ ana1Core (opts, mgs, oType)
              fId = mkLocalId fn  manyDataConTy fTy
              vId = mkLocalId vn  manyDataConTy vzTy
 
-             dAllRepTy = mkTupleTy Boxed [intTy, anyType]
-             vRepTy = mkTupleTy Boxed [intTy, anyType]
+             dAllRepTy = mkTupleTy1 Boxed [intTy, anyType]
+             vRepTy = mkTupleTy1 Boxed [intTy, anyType]
 
              dAllrep = Cast (Var dId) (mkCastCo dAllTy dAllRepTy)
              vrep = Cast (Var vId) (mkCastCo vzTy vRepTy)
@@ -499,7 +499,7 @@ ana1Core (opts, mgs, oType)
                                                                                     , Type anyType
                                                                                     , dAllrep]])
                           (substCo subst $ mkCastCo anyType cuTy)
-                        , Cast (mkCoreTup []) (substCo subst $ mkCastCo (mkTupleTy Boxed []) proxyTy)-- not used so making this up
+                        , Cast (mkCoreTup []) (substCo subst $ mkCastCo (mkTupleTy1 Boxed []) proxyTy)-- not used so making this up
                         , mkCoreApps (Var sndId) [ Type intTy
                                                  , Type (mkAppTy
                                                          (anyTypeOfKind (mkTyVarTy (tyVars !! 0)
@@ -507,7 +507,7 @@ ana1Core (opts, mgs, oType)
                                                           (mkTyVarTy (tyVars !! 4)))
                                                  , Cast vrep (mkCastCo
                                                               vRepTy
-                                                              (mkTupleTy Boxed [intTy
+                                                              (mkTupleTy1 Boxed [intTy
                                                                                , substTy subst $  uTy ]))]
                         ])
 

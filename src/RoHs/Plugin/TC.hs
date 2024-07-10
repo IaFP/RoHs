@@ -18,6 +18,7 @@ import GHC.TcPlugin.API (TcPluginErrorMessage(..))
 import GHC.Builtin.Types
 
 import GHC.Core
+import GHC.Core.Utils
 import GHC.Core.Make
 import GHC.Core.Predicate
 import GHC.Core.Type
@@ -399,7 +400,8 @@ solve_trivial PluginDefs{..} givens acc ct
   = do { API.tcPluginTrace "1 Found instance of All with class and args" (vcat [ppr ct, ppr (cls, ls, ts)])
        ; wanteds <- sequence [API.newWanted (API.ctLoc ct) (AppTy cls t) | t <- ts]
        ; API.tcPluginTrace "2 Generating new wanteds" (ppr wanteds)
-       ; return $ acc <> ([(mkAllEvTerm wanteds predTy, ct)], map API.mkNonCanonical wanteds, [])
+       ; allterm <- mkAllEvTerm wanteds predTy
+       ; return $ acc <> ([(allterm, ct)], map API.mkNonCanonical wanteds, [])
        }
 
   -- Handles the case where we have [W] (R [x := t] ~+~ r) ~#  (R [x := t, y := u])
@@ -649,13 +651,21 @@ mkReflEvTerm predTy = API.evCast tuple (mkCoercion API.Representational tupleTy 
   tupleTy = mkTupleTy1 API.Boxed [intTy, unitTy]
   tuple = mkCoreBoxedTuple [mkCoreInt (-1), mkCoreBoxedTuple []]
 
-mkAllEvTerm :: [API.CtEvidence] -> Type -> API.EvTerm
-mkAllEvTerm evs predTy = API.evCast evAllTuple (mkCoercion API.Representational evAllTupleTy predTy) where
-  (evVars, predTys) = unzip [(evVar, pTy) | API.CtWanted pTy (API.EvVarDest evVar) _ _ <- evs]
-  evTuple = mkCoreConApps (cTupleDataCon (length evVars)) $ (map Type predTys) ++ map Var evVars
-  evAllTupleTy = mkTupleTy1 API.Boxed [intTy, anyType]
-  evAllTuple = mkCoreBoxedTuple [ mkCoreInt (length evVars)
-                                , Cast evTuple (mkCoercion API.Representational (mkConstraintTupleTy predTys) anyType)]
+mkAllEvTerm :: [API.CtEvidence] -> Type -> API.TcPluginM API.Solve API.EvTerm
+mkAllEvTerm evs predTy = do
+  API.tcPluginTrace "--Plugin mkAllEvTerm--" (vcat [ ppr (exprType evTuple)
+                                                   , ppr evTupleTy
+                                                   , ppr $ tyConName (cTupleTyCon (length predTys))
+                                                   , ppr $ API.eqType (exprType evTuple) (evTupleTy) ])
+
+  return $ API.evCast evAllTuple (mkCoercion API.Representational evAllTupleTy predTy)
+  where
+    (evVars, predTys) = unzip [(evVar, pTy) | API.CtWanted pTy (API.EvVarDest evVar) _ _ <- evs]
+    evTuple = mkCoreConApps (cTupleDataCon (length evVars)) $ (map Type predTys) ++ map Var evVars
+    evTupleTy = mkTyConApp (cTupleTyCon (length predTys)) predTys
+    evAllTupleTy = mkTupleTy1 API.Boxed [intTy, anyType]
+    evAllTuple = mkCoreBoxedTuple [ mkCoreInt (length evVars)
+                                  , Cast evTuple (mkCoercion API.Representational evTupleTy anyType)]
 
 -- We have x ~<~ y and y ~<~ z
 -- We need to build an evidence for x ~<~ z (toType)

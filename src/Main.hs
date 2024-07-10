@@ -16,7 +16,8 @@ module Main where
 
 import RoHs.Language.Lib
 import RoHs.Examples.Basic
-import RoHs.Plugin
+import RoHs.Examples.Variants
+import RoHs.Examples.RecVariants1
 
 default (Int)
 
@@ -48,3 +49,4 @@ main :: IO ()
 main = do putStrLn $ "s1 val: " ++ (show (unlabR0 @"x" s1))
           putStrLn $ "s3 val: " ++ (show (unlabR0 @"y" s3))
           putStrLn $ "answer to everything " ++ (show answer_to_everything)
+          putStrLn $ ((Rec showVar) `brnr` (Rec showLam)) ~$~ (idLam @(R '["var" := Zero Int, "lam" := One]))

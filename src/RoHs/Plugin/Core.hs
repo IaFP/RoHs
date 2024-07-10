@@ -31,7 +31,7 @@ install :: [CommandLineOption] -> [CoreToDo] -> CoreM [CoreToDo]
 install opts todo = case find findSamePass todo of       -- check that we don't run the transformation twice
                       Nothing -> return (strPass : todo) -- (e.g. if the "-fplugin" option is used twice)
                       _ -> return todo
-    where name = "RoHs Semantics Plugin"
+    where name = "RoHs Core Plugin"
           strPass = CoreDoPluginPass name (txRoHsSemantics RoHsPluginOptions{debugMode = dmode})
           dmode = "debug" `elem` opts
           findSamePass (CoreDoPluginPass s _) = s == name

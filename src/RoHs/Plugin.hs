@@ -9,7 +9,7 @@
 {-# HLINT ignore "Use camelCase" #-}
 module RoHs.Plugin (plugin) where
 
-import qualified GHC.Plugins as GHC (Plugin(..), defaultPlugin, purePlugin)
+import qualified GHC.Plugins as GHC (Plugin(..), defaultPlugin, impurePlugin)
 import qualified GHC.TcPlugin.API as API
 
 import qualified RoHs.Plugin.Source as SP (addPlusConstraints)
@@ -41,6 +41,6 @@ plugin :: GHC.Plugin
 plugin =
   GHC.defaultPlugin
     { GHC.tcPlugin        = \ _args -> Just $ API.mkTcPlugin TP.tcPlugin
-    , GHC.pluginRecompile = GHC.purePlugin
+    , GHC.pluginRecompile = GHC.impurePlugin
     , GHC.renamedResultAction = SP.addPlusConstraints
     }

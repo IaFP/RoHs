@@ -125,11 +125,13 @@ unlabV1 = unlabV1_I
 anaA1   = anaA1_I
 brn1    = brn1_I
 
+{-# OPAQUE con1 #-}
 con1 :: forall s {f} {t} {z}. R '[s := f] ~<~ z => f t -> V1 z t
 con1 x = inj1 (labV1 @s x)
 
 case1 :: forall s {f} {t} {u}. (f t -> u) -> V1 (R '[s := f]) t -> u
 case1 f = f . unlabV1
+{-# OPAQUE case1 #-}
 
 --
 
