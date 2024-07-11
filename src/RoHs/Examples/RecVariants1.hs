@@ -81,6 +81,11 @@ evalPN :: Mu (V1 (NatPosR ~+~ NatNegR)) -> Int
 evalPN = (~$~) ((Rec evalP) `brnr` (Rec evalN))
 
 
+toNat :: Int -> Mu (V1 NatPosR)
+toNat 0 = mkZP
+toNat k = mkIP (toNat (k-1))
+
+
 -- Example 2.
 -- Untyped Lambda Calculus
 type LamCR = R '[ "var" := Zero Int, "lam" := One, "app" := Two]

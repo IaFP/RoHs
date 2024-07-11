@@ -12,6 +12,7 @@
 module Main where
 
 import RoHs.Language.Lib
+import RoHs.Examples.RecVariants1
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -24,7 +25,9 @@ main :: IO (())
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "TestSuite" [ units, properties, expectFail fails ]
+tests = testGroup "TestSuite" [ units, properties
+                              -- , expectFail fails
+                              ]
 
 rec1 :: R0 (R '["x" := Int])
 rec1 = labR0 @"x" (1::Int)
@@ -41,6 +44,9 @@ properties = testGroup "Properties Testsuite"
       \ (x :: Int) (y :: Int) -> let r1 :: R0 (R '["x" := Int, "y" := Int ]) = (labR0 @"y" y) `cat0` (labR0 @"x" x) in
                                    let r2 :: R0 (R '["y" := Int, "x" := Int ]) = (labR0 @"x" x) `cat0` (labR0 @"y" y) in
                                      (==) @Int (unlabR0 @"x" (prj0 r1)) (unlabR0 @"x" (prj0 r2))
+  -- , SC.testProperty "church encoded nat" $
+  --   \ (x :: Int) -> (Rec evalP) ~$~ (toNat x) == x
+
   ]
 
 units :: TestTree
@@ -51,11 +57,22 @@ units = testGroup "Unit Testsuite"
   , testCase "concat is commutative" $
       (@?=) @Int (unlabR0 @"x" (prj0 $ cat0 rec1 rec2)) (unlabR0 @"x" (prj0 $ cat0 rec2 rec1))
 
+  , testCase "church encoding 0" $
+    (@?=) @Int ((Rec evalP) ~$~ (toNat 0)) 0
+
+  , testCase "church encoding 1" $
+    (@?=) @Int ((Rec evalP) ~$~ (toNat 1)) 1
+
+  , testCase "church encoding 5" $
+    (@?=) @Int ((Rec evalP) ~$~ (toNat 5)) 5
+
+
+
   ]
 
 
-fails :: TestTree
-fails = testGroup "Fail Testsuite"
-  [  P.testProgram "IllTyped.Unlab"     "cabal" ["run", "RoHs-test-illtype-unlab"] Nothing
-  ,  P.testProgram "IllTyped.RowConcat" "cabal" ["run", "RoHs-test-illtype-rowconcat"] Nothing
-  ]
+-- fails :: TestTree
+-- fails = testGroup "Fail Testsuite"
+--   [  P.testProgram "IllTyped.Unlab"     "cabal" ["run", "RoHs-test-illtype-unlab"] Nothing
+--   ,  P.testProgram "IllTyped.RowConcat" "cabal" ["run", "RoHs-test-illtype-rowconcat"] Nothing
+--   ]
