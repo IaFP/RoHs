@@ -25,7 +25,7 @@ data Zero t e = Z t     deriving Functor
 data One e    = O e     deriving Functor
 data Two e    = T e e   deriving Functor
 
-data Mu f     = Mk (f (Mu f))
+newtype Mu f     = Mk (f (Mu f))
 
 instance Show t => Show (Zero t e) where
   show (Z t) =  "Z " ++ show t

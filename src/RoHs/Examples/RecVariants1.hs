@@ -7,10 +7,7 @@
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -ddump-tc-trace -fforce-recomp -dcore-lint -ddump-ds -O0 -dasm-lint -dcmm-lint -ddump-asm-native -ddump-exitify -fplugin RoHs.Plugin -fplugin-opt debug #-}
 {-# OPTIONS -dcore-lint -O0 -fplugin RoHs.Plugin #-}
--- {-# OPTIONS -ddump-rn-trace -dcore-lint -O0 -ddump-tc-trace -ddump-simpl -ddump-ds-preopt
---            -dverbose-core2core -dsuppress-module-prefixes -dno-suppress-type-applications
---            -ddump-cmm
---            -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS -ddump-rn-trace -dcore-lint -O0 -ddump-tc-trace -ddump-simpl -ddump-ds-preopt -dverbose-core2core -dsuppress-module-prefixes -dno-suppress-type-applications -ddump-cmm -fprint-typechecker-elaboration -fplugin RoHs.Plugin #-}
 
 
 module RoHs.Examples.RecVariants1 where
@@ -88,30 +85,29 @@ toNat k = mkIP (toNat (k-1))
 
 -- Example 2.
 -- Untyped Lambda Calculus
-type LamCR = R '[ "var" := Zero Int, "lam" := One, "app" := Two]
+type LamCR = R '[ "var" := Zero Int, "lam" := One, "app" := Two ]
 
-type VarR = R '[ "var" := Zero Int]
-type AppR = R '[ "app" := One]
-type LamR = R '[ "app" := One]
+type VarR = R '[ "var" := Zero Int ]
+type AppR = R '[ "app" := One ]
+type LamR = R '[ "app" := One ]
 
-mkVar :: Int -> Mu (V1 (R '["var" := Zero Int]))
+mkVar :: VarR ~<~ z => Int -> Mu (V1 z)
 mkVar i = Mk (con1 @"var" (Z i))
 
-mkLam :: ( All Functor x
-         , R '["lam" := One] ~<~ z, x ~<~ z) => Mu (V1 x) -> Mu (V1 z)
+mkLam :: forall x z. ( All Functor x, R '["lam" := One] ~<~ z, x ~<~ z)
+      => Mu (V1 x) -> Mu (V1 z)
 mkLam e = Mk (con1 @"lam" (O e'))
-  where e' = injR e
-
+  where e' = injR @x @z e
 
 mkApp :: forall x y z. (All Functor x, All Functor y,
-          R '["app" := Two] ~<~ z, x ~<~ z, y ~<~ z) => Mu (V1 x) -> Mu (V1 y) -> Mu (V1 z)
+          (R '["app" := Two] ~<~ z, x ~<~ z, y ~<~ z)) => Mu (V1 x) -> Mu (V1 y) -> Mu (V1 z)
 mkApp e1 e2 = Mk (con1 @"app" (T e1' e2'))
-  where e1' = injR e1
-        e2' = injR e2
+  where e1' = injR @x @z e1
+        e2' = injR @y @z e2
 
 
 showVar :: V1 (R '["var" := Zero Int]) t -> p -> String
-showVar e = \_ -> case1 @"var" (\(Z (i::Int)) -> show i) e
+showVar e _ = case1 @"var" (\(Z (i::Int)) -> show i) e
 
 showLam :: V1 (R '["lam" := One]) t -> (t -> String) -> String
 showLam e r = case1 @"lam" (\(O b) -> "(\\ " ++ r b ++ ")") e
@@ -119,23 +115,37 @@ showLam e r = case1 @"lam" (\(O b) -> "(\\ " ++ r b ++ ")") e
 showApp :: V1 (R '["app" := Two]) t -> (t -> String) -> String
 showApp e r = case1 @"app" (\(T fn a) -> (r fn)  ++ " " ++ (r a)) e
 
-
-showTerm :: Mu (V1 LamCR) -> String
+-- showTerm :: Mu (V1 LamCR) -> String
 showTerm x = ((Rec showVar) `brnr` (Rec showLam) `brnr` (Rec showApp)) ~$~ x
 
-
-showLamR :: Mu (V1 (R '["var" := Zero Int, "lam" := One])) -> String
+-- showLamR :: Mu (V1 (R '["var" := Zero Int, "lam" := One])) -> String
 showLamR x = ((Rec showVar) `brnr` (Rec showLam)) ~$~ x
 
+-- type Env t = (Int -> V1 LamCR t)
 
-idLam :: forall z. (R '["var" := Zero Int] ~<~ z, R '["lam" := One] ~<~ z) => Mu (V1 z)
-idLam = mkLam (mkVar 0)
+-- extend :: Env t -> Env t
+-- extend env = \ i -> env (i + 1)
 
--- appId :: Mu (V1 LamR)
--- appId = mkApp idLam (mkVar 0)
+-- evalVar :: V1 (R '["var" := Zero Int]) t -> p -> Env t -> V1 LamCR t
+-- evalVar e _ env = case1 @"var" (\(Z (i::Int)) -> env i) e
+
+-- evalLam :: V1 (R '["lam" := One]) t -> (Env t -> V1 LamCR t -> V1 LamCR t) -> Env t -> V1 LamCR t
+-- evalLam e r env = case1 @"lam" (\(O body) -> r (extend env) body) e
+var :: forall z. (VarR ~<~ z) => Mu (V1 z)
+var = mkVar 0
+
+idLam :: forall z. (All Functor z, R '["var" := Zero Int, "lam" := One] ~<~ z) => Mu (V1 z)
+idLam = mkLam (var @z)
+
+
+-- idLamInst = idLam @(R '["var" := Zero Int, "lam" := One])
+
+appId :: forall z. (All Functor z, LamCR ~<~ z) => Mu (V1 z)
+appId = mkApp (idLam @z) (var @z)
+
 
 idstr :: String
-idstr = showLamR (idLam @(R '["var" := Zero Int, "lam" := One]))
+idstr = showLamR idLam
 
 varstr :: String
-varstr = (Rec showVar) ~$~ (mkVar 0)
+varstr = (Rec showVar) ~$~ (mkVar 42)

@@ -543,7 +543,7 @@ solve_trivial PluginDefs{..} givens acc ct
   =  do {
         ; let new_ev = mkLeqTransEvTerm composeId ct1 ct2 predTy
         --  TODO cast ctEvidence with ctEq first.
-        ; API.tcPluginTrace "--Plugin solving ~<~ transitive" (vcat [ ppr ct
+        ; API.tcPluginTrace "--Plugin solving ~<~ transitive complex" (vcat [ ppr ct
                                                                     , ppr zTyVar
                                                                     , ppr y0TyVar
                                                                     , ppr (xy, ct1, ct2) , ppr new_ev
@@ -593,6 +593,46 @@ solve_trivial PluginDefs{..} givens acc ct
                   }
         ; else return $ acc
         }
+
+
+
+{-
+
+ ------------------------------------------
+    𝚪, z ~<~ x, x ~<~ y |= z ~<~ y
+-}
+  -- Handles the case of transitive reasoning of ~<~
+  -- should be called only for concrete z and x 
+  | predTy <- API.ctPred ct
+  , Just (clsCon, ([_, z_row, y])) <- API.splitTyConApp_maybe predTy
+  , clsCon == API.classTyCon rowLeqCls
+  , not . isJust $ getTyVar_maybe z_row
+  , Just (_r_tycon1, [_, assocs_z]) <- API.splitTyConApp_maybe z_row
+  , let z = unfold_list_type_elems assocs_z
+  , isJust $ getTyVar_maybe y
+  , isConcreteRow z
+  , let ctleqs = filter (\c -> case API.splitTyConApp_maybe (API.ctPred c) of
+                              {Just (tc, [_, _, y']) | tc == API.classTyCon rowLeqCls, isJust $ getTyVar_maybe y'
+                                                      -> API.eqType y' y
+
+                              ; _ -> False}) givens
+  , not (null ctleqs)
+  , let ctleqs' = filter (\c -> case API.splitTyConApp_maybe (API.ctPred c) of
+                                         Just (_tc, [_, zs_row, _])
+                                           | Just (_r_tycon1, [_, assocs_zs]) <- API.splitTyConApp_maybe zs_row
+                                           , let zs = unfold_list_type_elems assocs_zs
+                                           , isConcreteRow zs -> not (null (setIntersect z zs))
+
+                                         _ -> False) ctleqs
+  , not (null ctleqs')
+  = do  { API.tcPluginTrace "--Plugin solving ~<~ transitive" (vcat [ ppr ct
+                                                                    , ppr ctleqs'
+                                                                    ])
+        ; ev <- mkTransitiveEv composeId ct (head ctleqs') predTy
+        ; return $ acc <> ([(ev, ct)], [], [])
+        }
+
+
 
 
 {-
@@ -682,6 +722,33 @@ mkLeqTransEvTerm composeId ct1 ct2 toType = API.evCast evExpr (mkCoercion API.Re
     arg1, arg2 :: API.EvExpr
     arg1 = Cast (API.ctEvExpr (API.ctEvidence ct1)) (mkCoercion API.Representational (API.ctPred ct1) tupleTy)
     arg2 = Cast (API.ctEvExpr (API.ctEvidence ct2)) (mkCoercion API.Representational (API.ctPred ct2) tupleTy)
+
+
+mkTransitiveEv :: API.Id -> API.Ct -> API.Ct -> Type -> API.TcPluginM API.Solve API.EvTerm
+mkTransitiveEv composeId ct1 ct2 toType
+  | Just (_clsCon1, ([_, z_row, _])) <- API.splitTyConApp_maybe (API.ctPred ct1)
+  , Just (_clsCon1', ([_, zs_row, _])) <- API.splitTyConApp_maybe (API.ctPred ct2)
+  , Just (_r_tycon1, [kx, assocs_z]) <- API.splitTyConApp_maybe z_row
+  , Just (_r_tycon2, [ky, assocs_zs]) <- API.splitTyConApp_maybe zs_row
+  , let z = unfold_list_type_elems assocs_z
+  , let zs = unfold_list_type_elems assocs_zs
+  , API.eqType kx ky -- we are not having hetrogenous row concat
+  , Just is <- checkSubsetEv z zs
+  = do { let arg1 = mkCoreBoxedTuple [mkCoreInt (length is), mkCoreBoxedTuple (map mkCoreInt is)]
+             arg1Ty = mkTupleTy1 API.Boxed [intTy, mkTupleTy1 API.Boxed (replicate (length is) intTy)]
+
+             tupleTy = mkTupleTy1 API.Boxed [intTy, anyType]
+             arg2 = Cast (API.ctEvExpr (API.ctEvidence ct2)) (mkCoercion API.Representational (API.ctPred ct2) tupleTy)
+
+             evExpr :: API.EvExpr
+             evExpr = mkCoreApps (Var composeId) [Type anyType, Type anyType, Type anyType
+                                                 , Cast arg1 (mkCoercion API.Representational arg1Ty tupleTy)
+                                                 , arg2]
+
+
+             
+       ; API.tcPluginTrace "--mkTransitiveEv" (ppr arg1)
+       ; return $ API.evCast evExpr (mkCoercion API.Representational tupleTy toType) }
 
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
@@ -827,6 +894,15 @@ eqAssoc _ _ = error "shouldn't happen eqAssoc"
 -- This is the "cannonical/principal" type representation of a row type
 sortAssocs :: [API.TcType] -> [API.TcType]
 sortAssocs = sortBy cmpAssoc
+
+
+isConcreteAssoc :: API.TcType -> Bool
+isConcreteAssoc lty | Just (_, [_, LitTy (StrTyLit _), _]) <- API.splitTyConApp_maybe lty
+                    = True
+                    | otherwise
+                    = False
+isConcreteRow :: [API.TcType] -> Bool
+isConcreteRow row = all isConcreteAssoc row
 
 ---- The worlds most efficient set operations above -----
 

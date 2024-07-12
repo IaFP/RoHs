@@ -182,6 +182,8 @@ compose :: (Int, a) -> (Int, b) -> (Int, c)
 -- again, we seem to need to iterate our definition... I'll do only a few cases
 -- I am concerned that we're going to stack up `unsafeCoerce`s, and that will
 -- lead to underspecified types (and so misbehaving coercions) in the middle...
+compose _ (-1, _) = error "compose error"
+compose (-1, _) _ = error "compose error"
 compose (0, _) _ = (0, unsafeCoerce ())
 compose (1, d) (_, e) = (1, unsafeCoerce (MkSolo (unsafeNth i e))) where
   MkSolo i = unsafeCoerce d

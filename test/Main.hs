@@ -44,8 +44,8 @@ properties = testGroup "Properties Testsuite"
       \ (x :: Int) (y :: Int) -> let r1 :: R0 (R '["x" := Int, "y" := Int ]) = (labR0 @"y" y) `cat0` (labR0 @"x" x) in
                                    let r2 :: R0 (R '["y" := Int, "x" := Int ]) = (labR0 @"x" x) `cat0` (labR0 @"y" y) in
                                      (==) @Int (unlabR0 @"x" (prj0 r1)) (unlabR0 @"x" (prj0 r2))
-  -- , SC.testProperty "church encoded nat" $
-  --   \ (x :: Int) -> (Rec evalP) ~$~ (toNat x) == x
+  , SC.testProperty "church encoded nat" $
+    \ (x :: Int) -> (x `elem` [1..100]) ==> (Rec evalP) ~$~ (toNat x) == x
 
   ]
 

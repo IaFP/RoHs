@@ -63,14 +63,9 @@ bar1' = case0 @"x" id `brn0` case0 @"y" (\b -> if b then 0 else 1)
 answer_to_everything :: Int
 answer_to_everything = bar1' (inj0 (labV0 @"x" (42::Int)))
 
-appId :: Mu (V1 LamCR)
-appId = mkApp @(R '["var" := Zero Int, "lam" := One]) @(R '["var" := Zero Int]) @LamCR idLam (mkVar 0)
-
-
 main :: IO ()
-main = do putStrLn $ "The ultimate answer"
-          putStrLn $ show answer_to_everything
-          putStrLn $ ((Rec showVar) `brnr` (Rec showLam)) ~$~ (idLam @(R '["var" := Zero Int, "lam" := One]))
-          putStrLn $ idstr
+main = do putStrLn $ "The ultimate answer: " ++ show answer_to_everything
           putStrLn $ varstr
+          putStrLn $ ((Rec showVar) `brnr` (Rec showLam)) ~$~ idLam
+          putStrLn $ idstr
           putStrLn $ showTerm appId
