@@ -25,54 +25,20 @@ The testcase that fails:
 ```
 
 
+```Haskell
+	showLamR (idLam @(R '["var" := Zero Int, "lam" := One]))
+= { def showLamR }
+	((Rec showVar) `brnr` (Rec showLam)) ~$~ (idLam @(R '["var" := Zero Int, "lam" := One]))
+	
+= { }
+	((Rec showVar) `brnr` (Rec showLam)) ~$~ (idLam @(R '["var" := Zero Int, "lam" := One]))
+
+
 ```
-BCO_toplevel_E0 :: IO [()]
-[LclId] =
-    \u []
-        let {
-          it_swbl :: String
-          [LclId] =
-              \u []
-                  let {
-                    sat_swbq :: V1 (R '["var" ':= Zero Int]) Any
-                    [LclId] =
-                        \u []
-                            let {
-                              sat_swbo :: Int
-                              [LclId] =
-                                  I#! [0#]; } in
-                            let {
-                              sat_swbp :: Zero Int Any
-                              [LclId] =
-                                  Z! [sat_swbo]; } in
-                            let {
-                              sat_swbm :: Int
-                              [LclId] =
-                                  I#! [-1#]; } in
-                            let {
-                              sat_swbn :: R '["var" ':= Zero Int] ~<~ R '["var" ':= Zero Int]
-                              [LclId] =
-                                  (,)! [sat_swbm ()];
-                            } in  con1 sat_swbn sat_swbp;
-                  } in  showVar sat_swbq id; } in
-        let {
-          sat_swbu :: IO [()]
-          [LclId] =
-              \u []
-                  let {
-                    sat_swbt :: [()]
-                    [LclId] =
-                        :! [it_swbl []];
-                  } in  returnIO sat_swbt; } in
-        let {
-          sat_swbs :: IO ()
-          [LclId] =
-              \u []
-                  case $fShowList $fShowChar of sat_swbr {
-                  __DEFAULT -> print sat_swbr it_swbl;
-                  };
-        } in  thenIO sat_swbs sat_swbu;
 
 
-"0"
+```Haskell
+idLam = mkLam (mkVar @VarR 0)
+      = mkLam z $dAllF 
+
 ```

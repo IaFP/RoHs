@@ -42,7 +42,7 @@ cat0_I :: forall {x} {y} {z}. Plus x y z => R0 x -> R0 y -> R0 z
 cat0_I = undefined
 
 
-syn0_I :: forall c {z} {u}.
+syn0_I :: forall c {z}.
          All c z =>
          (forall {s} {y} {u}. (Plus (R '[s := u]) y z, R '[s := u] ~<~ z, y ~<~ z, c u)
                             =>  Proxy s -> u)

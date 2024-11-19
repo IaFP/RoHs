@@ -103,7 +103,7 @@ case0 :: forall s {t} {u}. (t -> u) -> V0 (R '[s := t]) -> u
 case0 f = f . unlabV0  -- I am surprised GHC can figure this out... and somewhat concerned about what it's actually figured out
 
 sel0 :: forall s {t} {z}. R '[s := t] ~<~ z => R0 z -> t
-sel0 r = unlabR0 @s (prj0 r)
+sel0 r = unlabR0 @s (prj0 @(R '[s := t]) @z r)
 
 
 --  Higher Kinded Domains
@@ -209,6 +209,9 @@ catC :: (Int, a) -> ((Int, c), d) -> ((Int, e), f) -> ((Int, g), h) -- these typ
 catC (2, fs) r p = ((2, unsafeCoerce (0::Int, 1::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p))
 catC (3, fs) r p = ((3, unsafeCoerce (0::Int, 1::Int, 2::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p))
 catC (4, fs) r p = ((4::Int, unsafeCoerce (0::Int, 1::Int, 2::Int, 3::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p, get (unsafeNth 3 fs) r p))
+catC (5, fs) r p = ((5::Int, unsafeCoerce (0::Int, 1::Int, 2::Int, 3::Int, 4::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p, get (unsafeNth 3 fs) r p, get (unsafeNth 4 fs) r p))
+catC (6, fs) r p = ((6::Int, unsafeCoerce (0::Int, 1::Int, 2::Int, 3::Int, 4::Int, 5::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p, get (unsafeNth 3 fs) r p, get (unsafeNth 4 fs) r p, get (unsafeNth 5 fs) r p))
+catC (7, fs) r p = ((7::Int, unsafeCoerce (0::Int, 1::Int, 2::Int, 3::Int, 4::Int, 5::Int, 6::Int)), unsafeCoerce (get (unsafeNth 0 fs) r p, get (unsafeNth 1 fs) r p, get (unsafeNth 2 fs) r p, get (unsafeNth 3 fs) r p, get (unsafeNth 4 fs) r p, get (unsafeNth 5 fs) r p, get (unsafeNth 6 fs) r p))
 catC _ _ _       = error "catC ran out of patience"
 
 get :: (Int, Int) -> ((Int, c), d) -> ((Int, e), f) -> h

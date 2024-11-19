@@ -61,13 +61,13 @@ xformE _ e = return e
 
 xformT :: Names -> LHsType GhcRn -> TcM (LHsType GhcRn)
 xformT names t =
-  do (t'@(L loc@(SrcSpanAnn _ srcSpan) _), preds) <- runWriterT (collect names t)
+  do (t'@(L loc _), preds) <- runWriterT (collect names t)
      if null preds
      then return t'
      else -- We encountered a type without quantifiers... so I'll try converting
           -- it to a qualified type, but I'm not 100% sure how this will work
           -- out...
-          do let t'' = L loc (HsQualTy NoExtField (L (SrcSpanAnn EpAnnNotUsed srcSpan) (uniquePlusPreds preds)) t')
+          do let t'' = L loc (HsQualTy NoExtField (L noAnn (uniquePlusPreds preds)) t')
              traceRn "3 adding predicates to type (no quantifiers):" (cat [ppr preds, ppr (uniquePlusPreds preds), ppr t, text " ==> ", ppr t''])
              return t''
 
@@ -103,13 +103,13 @@ collect names = collectL where
     do (body', preds) <- censor (const []) $ listen (collectL body)
        lift (traceRn ("6 At " ++ showSDocUnsafe (ppr typeLoc) ++ " found a signature") (vcat [ text "body:" <+> ppr body'
                                                                                                , text "preds:" <+> ppr preds]))
-       return (HsForAllTy NoExtField tele (L typeLoc (HsQualTy NoExtField (L (SrcSpanAnn EpAnnNotUsed (locA typeLoc)) preds) body')))
+       return (HsForAllTy NoExtField tele (L typeLoc (HsQualTy NoExtField (L noAnn preds) body')))
   collectT (HsQualTy NoExtField ctxt body) =
     HsQualTy NoExtField <$> collectC ctxt <*> collectL body
   collectT t@(HsAppTy NoExtField (L srcloc (HsAppTy NoExtField (L _ (HsTyVar _ NotPromoted (L nameLoc name))) lhs)) rhs)
     | name == plusTyCon names && (not (isRowLiteral names lhs) || not (isRowLiteral names rhs)) =
       do let
-           plusConTy = L srcloc (HsTyVar EpAnnNotUsed NotPromoted (L nameLoc (plusPredCon names)))
+           plusConTy = L srcloc (HsTyVar noAnn NotPromoted (L nameLoc (plusPredCon names)))
            p = foldl mkHsAppTy plusConTy [lhs, rhs, L srcloc t]
          lift (traceRn ("1 At " ++ showSDocUnsafe (ppr srcloc) ++ " found use of ~+~:") (ppr t))
          tell [p]
@@ -133,7 +133,7 @@ collect names = collectL where
     --  lhs ~+~ rhs ~~~> Plus lhs rhs (lhs ~+~ rhs)
     | name == plusTyCon names && (not (isRowLiteral names lhs) || not (isRowLiteral names rhs)) =
       do let
-           plusConTy = L srcloc (HsTyVar EpAnnNotUsed NotPromoted (L nameloc (plusPredCon names)))
+           plusConTy = L srcloc (HsTyVar noAnn NotPromoted (L nameloc (plusPredCon names)))
            p = foldl mkHsAppTy plusConTy [lhs, rhs, L srcloc t]
 
          lift (traceRn "2 Emitting constraint" (ppr p))

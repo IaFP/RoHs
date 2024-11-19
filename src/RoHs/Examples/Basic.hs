@@ -79,11 +79,13 @@ qqqqq = brn0 (case0 @"x" id) (case0 @"y" (\b -> if b then 0 else 1))
 
 --        inj0 @z
 
-bar2 :: forall z y1 y2.
+bar2 :: forall z. -- y1 y2.
         -- Bit of a run-around here because GHC doesn't like `z ~<~ x ~+~ y` constraints
-        (Plus (R '["x" := Integer]) z y1,    -- `Integer` so defaulting doesn't get in the way
-         Plus (R '["x" := Bool]) z y2) =>
-        V0 y1 -> V0 y2
+        -- (
+
+         --  Plus (R '["x" := Integer]) z y1,    -- `Integer` so defaulting doesn't get in the way
+         -- Plus (R '["x" := Bool]) z y2) =>
+        V0 ((R '["x" := Integer]) ~+~ z)  -> V0 ((R '["x" := Bool]) ~+~ z)
 bar2 = case0 @"x" (\i -> con0 @"x" (i == zero)) `brn0` inj0
   where zero :: Integer = 0
 

@@ -7,7 +7,7 @@
 -- {-# OPTIONS -fforce-recomp -ddump-tc-trace -dcore-lint -fplugin RoHs.Plugin #-}
 -- {-# OPTIONS -ddump-tc-trace -fforce-recomp -dcore-lint -ddump-ds -O0 -dasm-lint -dcmm-lint -ddump-asm-native -ddump-exitify -fplugin RoHs.Plugin -fplugin-opt debug #-}
 {-# OPTIONS -dcore-lint -O0 -fplugin RoHs.Plugin #-}
--- {-# OPTIONS -ddump-rn-trace -dcore-lint -O0 -ddump-tc-trace -ddump-simpl -ddump-ds-preopt -dverbose-core2core -dsuppress-module-prefixes -dno-suppress-type-applications -ddump-cmm -fprint-typechecker-elaboration -fplugin RoHs.Plugin #-}
+-- {-# OPTIONS -fforce-recomp -ddump-rn-trace -dcore-lint -O0 -ddump-tc-trace -ddump-simpl -ddump-ds-preopt -dverbose-core2core -dsuppress-module-prefixes -dno-suppress-type-applications -ddump-cmm -fprint-typechecker-elaboration -fplugin RoHs.Plugin #-}
 
 
 module RoHs.Examples.RecVariants1 where
@@ -44,14 +44,14 @@ type NatNegR = R '[ "zeroN" := Zero (), "dec1" := One]
 evalZP :: V1 (R '[ "zeroP" := Zero () ]) t -> p -> Int
 evalIP :: V1 (R '[ "inc1" := One ]) t -> (t -> Int) -> Int
 
-evalZP e _ = case1 @"zeroP" (\(Z _) -> 0) e
+evalZP e _ = case1 @"zeroP" (\(Z ()) -> 0) e
 evalIP e' r = case1 @"inc1" (\(O e) -> 1 + r e) e'
 
 
 evalZN :: V1 (R '[ "zeroN" := Zero ()]) t -> p -> Int
 evalIN :: V1 (R '[ "dec1" := One ]) t -> (t -> Int) -> Int
 
-evalZN e _ = case1 @"zeroN" (\(Z _) -> 0) e
+evalZN e _ = case1 @"zeroN" (\(Z ()) -> 0) e
 evalIN e' r = case1 @"dec1" (\(O e) -> (r e) - 1) e'
 
 
@@ -121,21 +121,25 @@ showTerm x = ((Rec showVar) `brnr` (Rec showLam) `brnr` (Rec showApp)) ~$~ x
 -- showLamR :: Mu (V1 (R '["var" := Zero Int, "lam" := One])) -> String
 showLamR x = ((Rec showVar) `brnr` (Rec showLam)) ~$~ x
 
--- type Env t = (Int -> V1 LamCR t)
+type Env t = (Int -> V1 LamCR t)
 
--- extend :: Env t -> Env t
--- extend env = \ i -> env (i + 1)
+extend :: Env t -> Env t
+extend env = \ i -> env (i + 1)
 
--- evalVar :: V1 (R '["var" := Zero Int]) t -> p -> Env t -> V1 LamCR t
--- evalVar e _ env = case1 @"var" (\(Z (i::Int)) -> env i) e
+evalVar :: V1 (R '["var" := Zero Int]) t -> p -> Env t -> V1 LamCR t
+evalVar e _ env = case1 @"var" (\(Z (i::Int)) -> env i) e
 
--- evalLam :: V1 (R '["lam" := One]) t -> (Env t -> V1 LamCR t -> V1 LamCR t) -> Env t -> V1 LamCR t
--- evalLam e r env = case1 @"lam" (\(O body) -> r (extend env) body) e
+evalLam :: V1 (R '["lam" := One]) (V1 LamCR t) -> (Env t -> V1 LamCR t -> V1 LamCR t) -> Env t -> V1 LamCR t
+evalLam e r env = case1 @"lam" (\(O body) -> r (extend env) body) e
+
+evalApp :: V1 (R '["app" := Two]) t -> (Env t -> V1 LamCR t -> V1 LamCR t) -> Env t -> V1 LamCR t
+evalApp e r env = case1 @"app" (\(T fn a) -> undefined) e
+
 var :: forall z. (VarR ~<~ z) => Mu (V1 z)
 var = mkVar 0
 
 idLam :: forall z. (All Functor z, R '["var" := Zero Int, "lam" := One] ~<~ z) => Mu (V1 z)
-idLam = mkLam (var @z)
+idLam = mkLam (mkVar @z 0)
 
 
 -- idLamInst = idLam @(R '["var" := Zero Int, "lam" := One])

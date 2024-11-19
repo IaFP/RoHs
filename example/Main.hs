@@ -65,7 +65,6 @@ answer_to_everything = bar1' (inj0 (labV0 @"x" (42::Int)))
 
 main :: IO ()
 main = do putStrLn $ "The ultimate answer: " ++ show answer_to_everything
-          putStrLn $ varstr
           putStrLn $ ((Rec showVar) `brnr` (Rec showLam)) ~$~ idLam
           putStrLn $ idstr
           putStrLn $ showTerm appId

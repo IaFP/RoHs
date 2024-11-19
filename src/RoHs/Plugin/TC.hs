@@ -459,7 +459,7 @@ solve_trivial PluginDefs{..} givens acc ct
        ; nws <- mapM (\(lhsTy', rhsTy') ->
                         API.newWanted (API.ctLoc ct) $ API.mkPrimEqPredRole API.Nominal lhsTy' rhsTy')
                   eqs
-       ; return $ acc <> ( [(API.mkPluginUnivEvTerm "RoHs.Plugin.TC" API.Nominal lhsTy rhsTy, ct)]
+       ; return $ acc <> ( [(API.mkPluginUnivEvTerm "RoHs.Plugin.TC" API.Nominal [] lhsTy rhsTy, ct)]
                          , API.mkNonCanonical <$> nws
                          , [] )
        }
@@ -602,7 +602,7 @@ solve_trivial PluginDefs{..} givens acc ct
     𝚪, z ~<~ x, x ~<~ y |= z ~<~ y
 -}
   -- Handles the case of transitive reasoning of ~<~
-  -- should be called only for concrete z and x 
+  -- should be called only for concrete z and x
   | predTy <- API.ctPred ct
   , Just (clsCon, ([_, z_row, y])) <- API.splitTyConApp_maybe predTy
   , clsCon == API.classTyCon rowLeqCls
@@ -655,7 +655,7 @@ solve_trivial PluginDefs{..} givens acc ct
         ; if  null ctEqs
           then return acc
           else do { API.tcPluginTrace "--Plugin solving Eq from Given V1" (vcat [ ppr ct, ppr (lhsTy, rhsTy), ppr ctEqs ])
-                  ; return $ acc <> ([(API.mkPluginUnivEvTerm "RoHs.Plugin.TC" API.Nominal lhsTy rhsTy, ct)], [], [])}
+                  ; return $ acc <> ([(API.mkPluginUnivEvTerm "RoHs.Plugin.TC" API.Nominal [] lhsTy rhsTy, ct)], [], [])}
         }
 
   | otherwise = do API.tcPluginTrace "--Plugin solving No rule matches--" (ppr ct)
@@ -746,13 +746,14 @@ mkTransitiveEv composeId ct1 ct2 toType
                                                  , arg2]
 
 
-             
-       ; API.tcPluginTrace "--mkTransitiveEv" (ppr arg1)
-       ; return $ API.evCast evExpr (mkCoercion API.Representational tupleTy toType) }
 
+       ; API.tcPluginTrace "--mkTransitiveEv--" (ppr arg1)
+       ; return $ API.evCast evExpr (mkCoercion API.Representational tupleTy toType) }
+mkTransitiveEv _ ct1 ct2 toType = do API.tcPluginTrace "--mkTransitiveEv--" (vcat [ppr ct1, ppr ct2, ppr toType])
+                                     error "mkTransitiveEv"
 
 mkCoercion :: API.Role -> Type -> Type -> Coercion
-mkCoercion = API.mkPluginUnivCo "Proven by RoHs.Plugin.TC"
+mkCoercion r = API.mkPluginUnivCo "Proven by RoHs.Plugin.TC" r []
 
 -- If you get a list of assocs, flatten it out
 unfold_list_type_elems :: API.TcType -> [API.TcType]
@@ -809,7 +810,7 @@ rewrite_rowplus (PluginDefs { .. }) _givens tys
   , let rowAssocKi = mkTyConApp rowAssocTyCon [ka]
   = do { let inter = setIntersect assocs_a assocs_b
              concat_assocs = sortAssocs $ assocs_a ++ assocs_b
-             redn = API.mkTyFamAppReduction "RoHs.Tc.Plugin" API.Nominal rowPlusTF tys
+             redn = API.mkTyFamAppReduction "RoHs.Tc.Plugin" API.Nominal [] rowPlusTF tys
                                (API.mkTyConApp rTF [ka, mkPromotedListTy rowAssocKi concat_assocs])
        ; if null inter
          then do { API.tcPluginTrace "--Plugin RowConcatRewrite (~+~)--" (vcat [ text "args_a:" <+> ppr assocs_a

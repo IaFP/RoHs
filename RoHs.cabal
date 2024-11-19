@@ -56,8 +56,8 @@ common ghcopts
                  -dcore-lint
                  -dstg-lint
                  -falignment-sanitisation
-                 -finfo-table-map
-                 -fdistinct-constructor-tables
+                 -- -finfo-table-map
+                 -- -fdistinct-constructor-tables
 
 library
     -- Import common warning flags.
@@ -73,6 +73,7 @@ library
                       RoHs.Examples.Variants
                       RoHs.Examples.RecVariants
                       RoHs.Examples.RecVariants1
+                      RoHs.Examples.MWPLS
                       -- RoHs.Examples.RecVariants2
 
     -- Modules included in this library but not exported.
@@ -111,12 +112,12 @@ executable RoHs-sample-exe
     import:           ghcopts
 
 
-    build-depends:    base ^>=4.18,
+    build-depends:    base >=4.18,
                       ghc >=9.6.2,
                       ghc-prim,
-                      ghc-tcplugin-api ^>= 0.11.0.0,
+                      ghc-tcplugin-api >= 0.11.0.0,
                       mtl ^>= 2.3,
-                      ghc-tcplugins-extra ^>= 0.4.5,
+                      ghc-tcplugins-extra >= 0.4.5,
                       syb ^>= 0.7,
                       containers,
                       RoHs
@@ -203,11 +204,11 @@ test-suite RoHs-test
 
     -- Test dependencies.
     build-depends:
-        base ^>=4.18,
+        base >=4.18,
         ghc >=9.6.2,
         ghc-prim,
-        ghc-tcplugin-api ^>= 0.11.0.0,
-        ghc-tcplugins-extra ^>= 0.4.5,
+        ghc-tcplugin-api >= 0.11.0.0,
+        ghc-tcplugins-extra >= 0.4.5,
         syb ^>= 0.7,
 
         tasty ^>= 1.5,

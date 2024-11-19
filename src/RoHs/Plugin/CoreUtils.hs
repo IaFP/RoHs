@@ -5,7 +5,7 @@ import qualified GHC.TcPlugin.API as API
 
 -- | Helper functions for generating Core, as GHCi API may not give us the right abstractions
 mkCoercion :: Role -> Type -> Type -> Coercion
-mkCoercion = API.mkPluginUnivCo "RoHs.Plugin.Core"
+mkCoercion r = API.mkPluginUnivCo "RoHs.Plugin.Core" r []
 
 mkCastCo :: Type -> Type -> Coercion
 mkCastCo iTy oTy = mkCoercion Representational iTy oTy
