@@ -3,7 +3,7 @@ RoHs
 
 Experimenting with row types in GHC using a plugin
 
-- How to compile? set GHC to `9.6.4` (`ghcup tui` is your friend)
+- How to compile? set GHC to `9.10.1` (`ghcup tui` is your friend)
 ```
 $ cabal configure --enable-tests
 $ cabal build
